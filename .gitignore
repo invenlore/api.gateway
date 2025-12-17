@@ -1,0 +1,7 @@
+.vscode
+.cache
+.docker
+
+.env
+bin
+docker-compose.yaml

@@ -1,0 +1,22 @@
+services:
+  api-gateway:
+    build:
+      context: .
+    image: invenlore/invenlore-api-gateway:master
+    container_name: invenlore-api-gateway
+    hostname: invenlore-api-gateway
+    networks:
+      - invenlore-network
+    ports:
+      - 80:80
+      - 8081:8081
+    environment:
+      - APP_ENV=${APP_ENV:-dev}
+      - USER_SERVICE_ENDPOINT=invenlore-user-service:8081
+    deploy:
+      restart_policy:
+        condition: on-failure
+
+networks:
+  invenlore-network:
+    external: true
