@@ -13,13 +13,13 @@ jobs:
       - name: get latest tag
         uses: oprypin/find-latest-tag@v1
         with:
-          repository: invenlore/user.service
+          repository: invenlore/api.gateway
         id: get_tag
 
       - name: checkout service
         uses: actions/checkout@v4
         with:
-          repository: invenlore/user.service
+          repository: invenlore/api.gateway
           ref: ${{ steps.get_tag.outputs.tag }}
 
       - name: login to docker hub
@@ -50,9 +50,9 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            invenlore/invenlore-user-service:stable
-            invenlore/invenlore-user-service:master
-            invenlore/invenlore-user-service:${{ steps.get_tag.outputs.tag }}
+            invenlore/invenlore-api-gateway:stable
+            invenlore/invenlore-api-gateway:master
+            invenlore/invenlore-api-gateway:${{ steps.get_tag.outputs.tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -61,7 +61,7 @@ jobs:
         with:
           token: ${{ secrets.DOKPLOY_AUTH_TOKEN }}
           application_id: ${{ secrets.DOKPLOY_APPLICATION_ID }}
-          image: invenlore/invenlore-user-service:${{ steps.get_tag.outputs.tag }}
+          image: invenlore/invenlore-api-gateway:${{ steps.get_tag.outputs.tag }}
           base_url: ${{ secrets.DOKPLOY_URL }}
 
       - name: dokploy deployment
