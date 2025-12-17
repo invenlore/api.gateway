@@ -141,8 +141,8 @@ func LoadConfig() (*ServerConfig, error) {
 	}
 
 	cfg.GRPCServices = loadedServices
-	cfg.HTTP.Port = "8082"
-	cfg.Health.Port = "8083"
+	cfg.HTTP.Port = "8081"
+	cfg.Health.Port = "80"
 
 	logrus.Info("configuration loaded successfully")
 

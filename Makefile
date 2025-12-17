@@ -16,3 +16,6 @@ down:
 
 logs:
 	docker-compose logs -f
+
+publish:
+	GOPROXY=proxy.golang.org go list -m github.com/invenlore/api.gateway@v$(v)
