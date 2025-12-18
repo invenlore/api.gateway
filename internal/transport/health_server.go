@@ -6,8 +6,8 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/invenlore/api.gateway/pkg/config"
-	"github.com/invenlore/api.gateway/pkg/health"
+	"github.com/invenlore/core/pkg/config"
+	"github.com/invenlore/core/pkg/health"
 	"github.com/sirupsen/logrus"
 )
 
@@ -33,7 +33,7 @@ func StartHealthServer(ctx context.Context, cfg *config.ServerConfig, errChan ch
 	}
 
 	go func() {
-		logrus.Printf("health server serving on %s", listenAddr)
+		logrus.Infof("health server serving on %s", listenAddr)
 
 		if serveErr := server.Serve(ln); serveErr != nil && serveErr != http.ErrServerClosed {
 			errChan <- fmt.Errorf("health server failed to serve: %w", serveErr)

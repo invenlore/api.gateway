@@ -11,18 +11,11 @@ import (
 	"time"
 
 	"github.com/invenlore/api.gateway/internal/transport"
-	"github.com/invenlore/api.gateway/pkg/config"
+	"github.com/invenlore/core/pkg/config"
 	"github.com/sirupsen/logrus"
 )
 
 func Start() {
-	logrus.Info("gateway starting...")
-
-	cfg, err := config.LoadConfig()
-	if err != nil {
-		logrus.Fatalf("failed to load gateway configuration: %v", err)
-	}
-
 	var (
 		errChan  = make(chan error, 2)
 		stopChan = make(chan os.Signal, 1)
@@ -34,6 +27,19 @@ func Start() {
 
 		serviceErr error = nil
 	)
+
+	logrus.Info("gateway starting...")
+
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		logrus.Fatalf("failed to load gateway configuration: %v", err)
+	}
+
+	if cfg.AppEnv == "dev" {
+		logrus.SetLevel(logrus.TraceLevel)
+	} else {
+		logrus.SetLevel(logrus.InfoLevel)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
