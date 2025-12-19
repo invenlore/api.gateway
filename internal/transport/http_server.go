@@ -4,17 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"mime"
 	"net"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/invenlore/api.gateway/pkg/utils"
 	"github.com/invenlore/core/pkg/config"
 	"github.com/invenlore/core/pkg/logger"
-	third_party "github.com/invenlore/proto"
 	"github.com/invenlore/proto/pkg/user"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -23,22 +21,8 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func getSwaggerUIHandler() (http.Handler, error) {
-	swaggerSubFS, err := third_party.GetSwaggerUISubFS()
-	if err != nil {
-		return nil, fmt.Errorf("couldn't get swagger sub filesystem: %v", err)
-	}
-
-	mime.AddExtensionType(".svg", "image/svg+xml")
-
-	return http.StripPrefix("/swagger/", http.FileServer(http.FS(swaggerSubFS))), nil
-}
-
 func StartHTTPServer(ctx context.Context, cfg *config.ServerConfig, errChan chan error) (*http.Server, net.Listener, error) {
-	var (
-		swaggerJSONBytes = third_party.GetSwaggerJSON()
-		wg               sync.WaitGroup
-	)
+	var wg sync.WaitGroup
 
 	listenAddr := net.JoinHostPort(cfg.HTTP.Host, cfg.HTTP.Port)
 	logrus.Info("starting http server on ", listenAddr)
@@ -119,39 +103,14 @@ func StartHTTPServer(ctx context.Context, cfg *config.ServerConfig, errChan chan
 
 	wg.Wait()
 
-	swaggerHandler, swaggerHandlerError := getSwaggerUIHandler()
-	if swaggerHandlerError != nil {
-		logrus.Errorf("can't get swagger handler: %v", swaggerHandlerError)
+	combinedHandler, err := utils.NewCombinedHandler(ctx, mux)
+	if err != nil {
+		logrus.Errorf("failed to initialize combined handler, using gRPC mux: %v", err)
 	}
 
 	server := &http.Server{
-		Addr: listenAddr,
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/api.swagger.json" {
-				w.Header().Set("Content-Type", "application/json")
-				w.Write(swaggerJSONBytes)
-
-				return
-			}
-
-			if r.URL.Path == "/swagger" {
-				http.Redirect(w, r, "/swagger/", http.StatusMovedPermanently)
-
-				return
-			}
-
-			if strings.HasPrefix(r.URL.Path, "/api/") {
-				mux.ServeHTTP(w, r)
-
-				return
-			}
-
-			if swaggerHandlerError == nil {
-				swaggerHandler.ServeHTTP(w, r)
-
-				return
-			}
-		}),
+		Addr:              listenAddr,
+		Handler:           combinedHandler,
 		ReadTimeout:       cfg.HTTP.ReadTimeout,
 		WriteTimeout:      cfg.HTTP.WriteTimeout,
 		IdleTimeout:       cfg.HTTP.IdleTimeout,
