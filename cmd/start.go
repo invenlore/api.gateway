@@ -30,7 +30,7 @@ func Start() {
 
 	logrus.Info("gateway starting...")
 
-	cfg, err := config.LoadConfig()
+	cfg, err := config.Config()
 	if err != nil {
 		logrus.Fatalf("failed to load gateway configuration: %v", err)
 	}
@@ -43,7 +43,7 @@ func Start() {
 	go func() {
 		var err error
 
-		httpServer, httpServerListener, err = transport.StartHTTPServer(ctx, cfg, errChan)
+		httpServer, httpServerListener, err = transport.StartHTTPServer(ctx, cfg.GetConfig(), errChan)
 		if err != nil {
 			if httpServerListener != nil {
 				httpServerListener.Close()
@@ -56,7 +56,7 @@ func Start() {
 	go func() {
 		var err error
 
-		healthServer, healthServerListener, err = transport.StartHealthServer(ctx, cfg, errChan)
+		healthServer, healthServerListener, err = transport.StartHealthServer(ctx, cfg.GetConfig(), errChan)
 		if err != nil {
 			if healthServerListener != nil {
 				healthServerListener.Close()

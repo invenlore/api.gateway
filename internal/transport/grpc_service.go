@@ -16,7 +16,7 @@ import (
 )
 
 type ServiceConnectionInfo struct {
-	Config        config.GRPCService
+	Config        *config.GRPCService
 	Mux           *runtime.ServeMux
 	Conn          *grpc.ClientConn
 	Cancel        context.CancelFunc
@@ -29,7 +29,7 @@ func (sci *ServiceConnectionInfo) StartHealthCheck(ctx context.Context, dialOpts
 	healthCtx, cancel := context.WithCancel(ctx)
 	sci.Cancel = cancel
 
-	go func(serviceCfg config.GRPCService, mux *runtime.ServeMux) {
+	go func(serviceCfg *config.GRPCService, mux *runtime.ServeMux) {
 		for {
 			select {
 			case <-healthCtx.Done():
@@ -83,6 +83,10 @@ func (sci *ServiceConnectionInfo) StartHealthCheck(ctx context.Context, dialOpts
 					logrus.Errorf("health check failed for gRPC service %s at %s: %v, retrying in %s", serviceCfg.Name, serviceCfg.Address, healthErr, sci.HealthTimeout)
 				}
 
+				if sci.Conn != nil {
+					sci.Conn.Close()
+				}
+
 				sci.Conn = nil
 				sci.Registered = false
 
@@ -100,6 +104,11 @@ func (sci *ServiceConnectionInfo) StartHealthCheck(ctx context.Context, dialOpts
 				if err := serviceCfg.Register(healthCtx, mux, sci.Conn); err != nil {
 					logrus.Errorf("failed to register gRPC service handler for %s: %v, retrying after %s", serviceCfg.Name, err, sci.HealthTimeout)
 
+					if sci.Conn != nil {
+						sci.Conn.Close()
+					}
+
+					sci.Conn = nil
 					sci.Registered = false
 
 					sci.mu.Unlock()
@@ -109,10 +118,10 @@ func (sci *ServiceConnectionInfo) StartHealthCheck(ctx context.Context, dialOpts
 				}
 
 				logrus.Debugf("successfully registered gRPC service: %s", serviceCfg.Name)
+				logrus.Infof("service %s is healthy and registered", serviceCfg.Name)
+
 				sci.Registered = true
 			}
-
-			logrus.Infof("service %s is healthy and registered", serviceCfg.Name)
 
 			sci.mu.Unlock()
 			time.Sleep(sci.HealthTimeout)

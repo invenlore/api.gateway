@@ -57,7 +57,7 @@ func StartHTTPServer(
 	for _, service := range cfg.GRPCServices {
 		wg.Add(1)
 
-		go func(s config.GRPCService) {
+		go func(s *config.GRPCService) {
 			defer wg.Done()
 
 			sci := &ServiceConnectionInfo{
