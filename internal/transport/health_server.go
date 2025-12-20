@@ -11,7 +11,15 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func StartHealthServer(ctx context.Context, cfg *config.AppConfig, errChan chan error) (*http.Server, net.Listener, error) {
+func StartHealthServer(
+	ctx context.Context,
+	cfg *config.AppConfig,
+	errChan chan error,
+) (
+	*http.Server,
+	net.Listener,
+	error,
+) {
 	listenAddr := net.JoinHostPort(cfg.Health.Host, cfg.Health.Port)
 	logrus.Info("starting health server on ", listenAddr)
 

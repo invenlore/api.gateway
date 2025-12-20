@@ -90,7 +90,7 @@ func Start() {
 				logrus.Info("health server stopped gracefully")
 			}
 		} else {
-			logrus.Info("health server was not started")
+			logrus.Warn("health server was not started")
 		}
 
 		if httpServer != nil {
@@ -105,7 +105,7 @@ func Start() {
 				logrus.Info("http server stopped gracefully")
 			}
 		} else {
-			logrus.Info("http server was not started")
+			logrus.Warn("http server was not started")
 		}
 
 		logrus.Info("clean service shutdown complete")
