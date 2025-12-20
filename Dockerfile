@@ -18,8 +18,6 @@ WORKDIR /app
 
 COPY --from=builder /app/bin/gateway ./gateway
 
-EXPOSE 80 8081
-
 COPY --from=ghcr.io/tarampampam/microcheck:1 /bin/httpcheck /bin/httpcheck
 HEALTHCHECK --interval=1m --timeout=5s --start-period=10s --retries=3 CMD ["/bin/httpcheck", "http://localhost/health"]
 

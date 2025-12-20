@@ -2,26 +2,29 @@ package transport
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"sync"
-	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/invenlore/api.gateway/pkg/utils"
 	"github.com/invenlore/core/pkg/config"
 	"github.com/invenlore/core/pkg/logger"
-	"github.com/invenlore/proto/pkg/user"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/status"
 )
 
-func StartHTTPServer(ctx context.Context, cfg *config.ServerConfig, errChan chan error) (*http.Server, net.Listener, error) {
+func StartHTTPServer(
+	ctx context.Context,
+	cfg *config.AppConfig,
+	errChan chan error,
+) (
+	*http.Server,
+	net.Listener,
+	error,
+) {
 	var wg sync.WaitGroup
 
 	listenAddr := net.JoinHostPort(cfg.HTTP.Host, cfg.HTTP.Port)
@@ -49,65 +52,29 @@ func StartHTTPServer(ctx context.Context, cfg *config.ServerConfig, errChan chan
 		grpc.WithChainStreamInterceptor(streamClientInterceptors...),
 	}
 
+	serviceConnections := make(map[string]*ServiceConnectionInfo)
+
 	for _, service := range cfg.GRPCServices {
 		wg.Add(1)
 
 		go func(s config.GRPCService) {
-			var healthErr error
-
 			defer wg.Done()
 
-			conn, err := grpc.NewClient(s.Address, dialOpts...)
-			if err != nil {
-				logrus.Errorf("failed to dial gRPC service %s at %s: %v, this service will not be available", s.Name, s.Address, err)
-
-				return
+			sci := &ServiceConnectionInfo{
+				Config:        s,
+				Mux:           mux,
+				Registered:    false,
+				HealthTimeout: cfg.ServiceHealthTimeout,
 			}
 
-			checkCtx, checkCancel := context.WithTimeout(ctx, 5*time.Second)
-			defer checkCancel()
-
-			switch s.Name {
-			case "UserService":
-				client := user.NewUserServiceClient(conn)
-				_, healthErr = client.HealthCheck(checkCtx, &user.HealthRequest{})
-
-			default:
-				logrus.Warnf("skipping health check for unknown service: %s, assuming it will be registered", s.Name)
-				healthErr = nil
-			}
-
-			if healthErr != nil {
-				if status.Code(healthErr) == codes.DeadlineExceeded || errors.Is(healthErr, context.DeadlineExceeded) {
-					logrus.Errorf("health check for gRPC service %s at %s timed out after 5s, service is unavailable", s.Name, s.Address)
-				} else {
-					logrus.Errorf("health check failed for gRPC service %s at %s: %v, service will be unavailable", s.Name, s.Address, healthErr)
-				}
-
-				conn.Close()
-				return
-			} else {
-				logrus.Infof("health check for gRPC service %s at %s succeded, service is available", s.Name, s.Address)
-			}
-
-			if err := s.Register(ctx, mux, conn); err != nil {
-				logrus.Errorf("failed to register gRPC service handler for %s: %v, this service will not be available", s.Name, err)
-
-				conn.Close()
-				return
-			}
-
-			logrus.Infof("successfully connected and registered gRPC service: %s", s.Name)
+			serviceConnections[s.Name] = sci
+			sci.StartHealthCheck(ctx, dialOpts)
 		}(service)
 	}
 
 	wg.Wait()
 
-	combinedHandler, err := utils.NewCombinedHandler(ctx, mux)
-	if err != nil {
-		logrus.Errorf("failed to initialize combined handler, using gRPC mux: %v", err)
-	}
-
+	combinedHandler := utils.NewCombinedHandler(ctx, mux)
 	server := &http.Server{
 		Addr:              listenAddr,
 		Handler:           combinedHandler,
@@ -124,7 +91,17 @@ func StartHTTPServer(ctx context.Context, cfg *config.ServerConfig, errChan chan
 			errChan <- fmt.Errorf("http server failed to serve: %w", serveErr)
 		}
 
-		logrus.Info("gRPC client pool closed")
+		for _, sci := range serviceConnections {
+			if sci.Cancel != nil {
+				sci.Cancel()
+			}
+
+			if sci.Conn != nil {
+				sci.Conn.Close()
+			}
+		}
+
+		logrus.Debug("all gRPC client connections closed")
 	}()
 
 	return server, ln, nil

@@ -35,12 +35,6 @@ func Start() {
 		logrus.Fatalf("failed to load gateway configuration: %v", err)
 	}
 
-	if cfg.AppEnv == "dev" {
-		logrus.SetLevel(logrus.TraceLevel)
-	} else {
-		logrus.SetLevel(logrus.InfoLevel)
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -78,11 +72,11 @@ func Start() {
 		logrus.Errorf("service startup error: %v", serviceErr)
 
 	case <-stopChan:
-		logrus.Info("received stop signal")
+		logrus.Debug("received stop signal")
 	}
 
 	defer func() {
-		logrus.Info("attempting service graceful shutdown...")
+		logrus.Debug("attempting service graceful shutdown...")
 
 		if healthServer != nil {
 			logrus.Info("stopping health server...")

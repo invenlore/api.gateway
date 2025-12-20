@@ -19,6 +19,14 @@ github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.3 h1:NmZ1PKzSTQbuGHw9DGPFomqkkLW
 github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.3/go.mod h1:zQrxl1YP88HQlA6i9c63DSVPFklWpGX4OWAc9bFuaH4=
 github.com/invenlore/core v0.0.2 h1:OgnEWljC9ubNotypvybATUn6X6k9SNXxFir1wUcZUzg=
 github.com/invenlore/core v0.0.2/go.mod h1:VsvzFveRjig27NvlrmWJMjOA12zyfAMXI6BM7ewVIZ8=
+github.com/invenlore/core v0.0.3 h1:USjsnopzuDQ8OB3v2aWtRStfopDQ8R1HH5hwRFWmyXE=
+github.com/invenlore/core v0.0.3/go.mod h1:Cl/3rC4Xq5jMtepoYCbR5iZP6E9ITZWmYJ8A7erqqmA=
+github.com/invenlore/core v0.0.4 h1:4Olt0N8pAQzIA4xpdNQPjODfF91pMSd4iFIyBSeQHBY=
+github.com/invenlore/core v0.0.4/go.mod h1:Cl/3rC4Xq5jMtepoYCbR5iZP6E9ITZWmYJ8A7erqqmA=
+github.com/invenlore/core v0.0.5 h1:FEuwjInDV+ShPNz2Y0cC0SFcGcRBYe1UDNrKbISlcQc=
+github.com/invenlore/core v0.0.5/go.mod h1:Cl/3rC4Xq5jMtepoYCbR5iZP6E9ITZWmYJ8A7erqqmA=
+github.com/invenlore/core v0.0.6 h1:Hv67Y0NEFYJEdxcDJcQVgEi6h1h/78JEQBdlynUzH70=
+github.com/invenlore/core v0.0.6/go.mod h1:Cl/3rC4Xq5jMtepoYCbR5iZP6E9ITZWmYJ8A7erqqmA=
 github.com/invenlore/proto v1.3.2 h1:JFeC+lBBDiyeLe8Tg39FqUYruha/L7z6gu/qlQKD/Rk=
 github.com/invenlore/proto v1.3.2/go.mod h1:ptCcYw1BKHacVKYGt4ew2wVTI7xHBlNGw0kCsAm9HbM=
 github.com/invenlore/proto v1.3.4 h1:Aq50XYf33GChxPaqcka3/zTvMNw8epFv5eJbH8R/v9Y=

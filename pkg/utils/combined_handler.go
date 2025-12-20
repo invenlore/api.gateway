@@ -59,16 +59,16 @@ func getSwaggerUIHandler() (http.Handler, error) {
 	return http.StripPrefix("/swagger/", http.FileServer(http.FS(swaggerSubFS))), nil
 }
 
-func NewCombinedHandler(ctx context.Context, mux *runtime.ServeMux) (*CombinedHandler, error) {
-	factory := &CombinedHandler{
+func NewCombinedHandler(ctx context.Context, mux *runtime.ServeMux) *CombinedHandler {
+	handler := &CombinedHandler{
 		mux:         mux,
 		swaggerJSON: third_party.GetSwaggerJSON(),
 	}
 
-	factory.swaggerHandler, factory.swaggerErr = getSwaggerUIHandler()
-	if factory.swaggerErr != nil {
-		logrus.Errorf("couldn't get swagger handler: %v", factory.swaggerErr)
+	handler.swaggerHandler, handler.swaggerErr = getSwaggerUIHandler()
+	if handler.swaggerErr != nil {
+		logrus.Errorf("couldn't get swagger handler: %v", handler.swaggerErr)
 	}
 
-	return factory, nil
+	return handler
 }
