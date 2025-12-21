@@ -32,9 +32,11 @@ func (sci *ServiceConnectionInfo) Close() {
 	}
 
 	sci.mu.Lock()
+
 	conn := sci.Conn
 	sci.Conn = nil
 	sci.Registered = false
+
 	sci.mu.Unlock()
 
 	if conn != nil {
@@ -44,10 +46,12 @@ func (sci *ServiceConnectionInfo) Close() {
 
 func (sci *ServiceConnectionInfo) dropConn(conn *grpc.ClientConn) {
 	sci.mu.Lock()
+
 	if sci.Conn == conn {
 		sci.Conn = nil
 		sci.Registered = false
 	}
+
 	sci.mu.Unlock()
 
 	if conn != nil {
@@ -56,6 +60,8 @@ func (sci *ServiceConnectionInfo) dropConn(conn *grpc.ClientConn) {
 }
 
 func (sci *ServiceConnectionInfo) StartHealthCheck(ctx context.Context, dialOpts []grpc.DialOption) {
+	loggerEntry := logrus.WithField("scope", "grpcServiceConnection")
+
 	healthCtx, cancel := context.WithCancel(ctx)
 	sci.Cancel = cancel
 
@@ -66,25 +72,38 @@ func (sci *ServiceConnectionInfo) StartHealthCheck(ctx context.Context, dialOpts
 		for {
 			select {
 			case <-healthCtx.Done():
-				logrus.Debugf("health check for service %s stopped due to context cancellation", serviceCfg.Name)
+				loggerEntry.Tracef(
+					"health check for service %s stopped due to context cancellation",
+					serviceCfg.Name,
+				)
+
 				return
 			default:
 			}
 
-			// --- берём снимок полей под RLock
 			sci.mu.RLock()
+
 			conn := sci.Conn
 			registered := sci.Registered
+
 			sci.mu.RUnlock()
 
-			// --- dial без лока
 			if conn == nil {
-				logrus.Debugf("attempting to dial gRPC service %s at %s...", serviceCfg.Name, serviceCfg.Address)
+				loggerEntry.Tracef(
+					"attempting to dial gRPC service %s at %s...",
+					serviceCfg.Name,
+					serviceCfg.Address,
+				)
 
 				newConn, err := grpc.NewClient(serviceCfg.Address, dialOpts...)
 				if err != nil {
-					logrus.Errorf("failed to dial gRPC service %s at %s: %v", serviceCfg.Name, serviceCfg.Address, err)
-					// ожидание отменяемое
+					loggerEntry.Errorf(
+						"failed to dial gRPC service %s at %s: %v",
+						serviceCfg.Name,
+						serviceCfg.Address,
+						err,
+					)
+
 					select {
 					case <-healthCtx.Done():
 						return
@@ -94,10 +113,12 @@ func (sci *ServiceConnectionInfo) StartHealthCheck(ctx context.Context, dialOpts
 				}
 
 				sci.mu.Lock()
+
 				if sci.Conn == nil {
 					sci.Conn = newConn
 					conn = newConn
 				}
+
 				sci.mu.Unlock()
 
 				if conn != newConn {
@@ -105,7 +126,6 @@ func (sci *ServiceConnectionInfo) StartHealthCheck(ctx context.Context, dialOpts
 				}
 			}
 
-			// --- health-check без лока
 			checkCtx, checkCancel := context.WithTimeout(healthCtx, 5*time.Second)
 			var healthErr error
 
@@ -114,17 +134,28 @@ func (sci *ServiceConnectionInfo) StartHealthCheck(ctx context.Context, dialOpts
 				userClient := user.NewUserServiceClient(conn)
 				_, healthErr = userClient.HealthCheck(checkCtx, &user.HealthRequest{})
 			default:
-				logrus.Warnf("skipping health check for unknown service: %s", serviceCfg.Name)
+				loggerEntry.Tracef("skipping health check for unknown service: %s", serviceCfg.Name)
 			}
 
 			checkCancel()
 
 			if healthErr != nil {
-				isTimeout := status.Code(healthErr) == codes.DeadlineExceeded || errors.Is(healthErr, context.DeadlineExceeded)
+				isTimeout := status.Code(healthErr) == codes.DeadlineExceeded ||
+					errors.Is(healthErr, context.DeadlineExceeded)
+
 				if isTimeout {
-					logrus.Errorf("health check for gRPC service %s at %s timed out after 5s", serviceCfg.Name, serviceCfg.Address)
+					loggerEntry.Errorf(
+						"health check for gRPC service %s at %s timed out after 5s",
+						serviceCfg.Name,
+						serviceCfg.Address,
+					)
 				} else {
-					logrus.Errorf("health check failed for gRPC service %s at %s: %v", serviceCfg.Name, serviceCfg.Address, healthErr)
+					loggerEntry.Errorf(
+						"health check failed for gRPC service %s at %s: %v",
+						serviceCfg.Name,
+						serviceCfg.Address,
+						healthErr,
+					)
 				}
 
 				sci.dropConn(conn)
@@ -137,14 +168,18 @@ func (sci *ServiceConnectionInfo) StartHealthCheck(ctx context.Context, dialOpts
 				}
 			}
 
-			logrus.Debugf("service %s is healthy", serviceCfg.Name)
+			loggerEntry.Debugf("service %s is healthy", serviceCfg.Name)
 
-			// --- регистрация без лока, флаг ставим коротко под Lock
 			if !registered {
-				logrus.Debugf("registering gRPC service handler for %s...", serviceCfg.Name)
+				loggerEntry.Tracef("registering gRPC service handler for %s...", serviceCfg.Name)
 
 				if err := serviceCfg.Register(healthCtx, mux, conn); err != nil {
-					logrus.Errorf("failed to register gRPC service handler for %s: %v", serviceCfg.Name, err)
+					loggerEntry.Errorf(
+						"failed to register gRPC service handler for %s: %v",
+						serviceCfg.Name,
+						err,
+					)
+
 					sci.dropConn(conn)
 
 					select {
@@ -156,15 +191,16 @@ func (sci *ServiceConnectionInfo) StartHealthCheck(ctx context.Context, dialOpts
 				}
 
 				sci.mu.Lock()
+
 				if sci.Conn == conn {
 					sci.Registered = true
 				}
+
 				sci.mu.Unlock()
 
-				logrus.Infof("service %s is healthy and registered", serviceCfg.Name)
+				loggerEntry.Infof("service %s is healthy and registered", serviceCfg.Name)
 			}
 
-			// следующий цикл (отменяемо)
 			select {
 			case <-healthCtx.Done():
 				return

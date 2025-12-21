@@ -11,9 +11,16 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func NewHealthServer(_ context.Context, cfg *config.AppConfig) (*http.Server, net.Listener, error) {
-	listenAddr := net.JoinHostPort(cfg.Health.Host, cfg.Health.Port)
-	logrus.Info("starting health server on ", listenAddr)
+func NewHealthServer(
+	_ context.Context,
+	cfg *config.AppConfig,
+) (*http.Server, net.Listener, error) {
+	var (
+		loggerEntry = logrus.WithField("scope", "health")
+		listenAddr  = net.JoinHostPort(cfg.Health.Host, cfg.Health.Port)
+	)
+
+	loggerEntry.Info("starting health server...")
 
 	ln, err := net.Listen("tcp", listenAddr)
 	if err != nil {

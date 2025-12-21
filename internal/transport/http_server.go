@@ -16,9 +16,16 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-func NewHTTPServer(ctx context.Context, cfg *config.AppConfig) (*http.Server, net.Listener, func(), error) {
-	listenAddr := net.JoinHostPort(cfg.HTTP.Host, cfg.HTTP.Port)
-	logrus.Info("starting http server on ", listenAddr)
+func NewHTTPServer(
+	ctx context.Context,
+	cfg *config.AppConfig,
+) (*http.Server, net.Listener, func(), error) {
+	var (
+		loggerEntry = logrus.WithField("scope", "httpServer")
+		listenAddr  = net.JoinHostPort(cfg.HTTP.Host, cfg.HTTP.Port)
+	)
+
+	loggerEntry.Info("starting http server...")
 
 	ln, err := net.Listen("tcp", listenAddr)
 	if err != nil {
@@ -85,7 +92,7 @@ func NewHTTPServer(ctx context.Context, cfg *config.AppConfig) (*http.Server, ne
 			sci.Close()
 		}
 
-		logrus.Debug("all gRPC client connections closed")
+		loggerEntry.Trace("all gRPC client connections closed")
 	}
 
 	return server, ln, cleanup, nil

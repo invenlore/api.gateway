@@ -18,11 +18,12 @@ import (
 )
 
 func Start() {
-	logrus.Info("gateway starting...")
+	loggerEntry := logrus.WithField("scope", "gateway")
+	loggerEntry.Info("gateway starting...")
 
 	cfg, err := config.Config()
 	if err != nil {
-		logrus.Fatalf("failed to load gateway configuration: %v", err)
+		loggerEntry.Fatalf("failed to load gateway configuration: %v", err)
 	}
 
 	baseCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
@@ -32,7 +33,7 @@ func Start() {
 
 	httpSrv, httpLn, httpCleanup, err := transport.NewHTTPServer(ctx, cfg.GetConfig())
 	if err != nil {
-		logrus.Fatalf("http server init failed: %v", err)
+		loggerEntry.Fatalf("http server init failed: %v", err)
 	}
 
 	healthSrv, healthLn, err := transport.NewHealthServer(ctx, cfg.GetConfig())
@@ -43,29 +44,33 @@ func Start() {
 			httpCleanup()
 		}
 
-		logrus.Fatalf("health server init failed: %v", err)
+		loggerEntry.Fatalf("health server init failed: %v", err)
 	}
 
 	g.Go(func() error {
-		logrus.Infof("http server serving on %s", httpSrv.Addr)
+		loggerEntry.Infof("http server serving on %s...", httpSrv.Addr)
+
 		if err := httpSrv.Serve(httpLn); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			return fmt.Errorf("http serve failed: %w", err)
 		}
+
 		return nil
 	})
 
 	g.Go(func() error {
-		logrus.Infof("health server serving on %s", healthSrv.Addr)
+		loggerEntry.Infof("health server serving on %s...", healthSrv.Addr)
+
 		if err := healthSrv.Serve(healthLn); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			return fmt.Errorf("health serve failed: %w", err)
 		}
+
 		return nil
 	})
 
 	g.Go(func() error {
 		<-ctx.Done()
 
-		logrus.Debug("attempting graceful shutdown...")
+		loggerEntry.Trace("attempting graceful shutdown...")
 
 		stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -77,14 +82,15 @@ func Start() {
 			httpCleanup()
 		}
 
-		logrus.Info("clean service shutdown complete")
+		loggerEntry.Info("clean gateway shutdown complete")
 		return nil
 	})
 
 	if err := g.Wait(); err != nil {
-		logrus.Errorf("gateway stopped with error: %v", err)
+		loggerEntry.Errorf("gateway stopped with error: %v", err)
+
 		os.Exit(1)
 	}
 
-	logrus.Info("gateway stopped gracefully")
+	loggerEntry.Info("gateway stopped gracefully")
 }

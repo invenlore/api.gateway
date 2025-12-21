@@ -60,6 +60,8 @@ func getSwaggerUIHandler() (http.Handler, error) {
 }
 
 func NewCombinedHandler(ctx context.Context, mux *runtime.ServeMux) *CombinedHandler {
+	loggerEntry := logrus.WithField("scope", "utils")
+
 	handler := &CombinedHandler{
 		mux:         mux,
 		swaggerJSON: third_party.GetSwaggerJSON(),
@@ -67,7 +69,7 @@ func NewCombinedHandler(ctx context.Context, mux *runtime.ServeMux) *CombinedHan
 
 	handler.swaggerHandler, handler.swaggerErr = getSwaggerUIHandler()
 	if handler.swaggerErr != nil {
-		logrus.Errorf("couldn't get swagger handler: %v", handler.swaggerErr)
+		loggerEntry.Errorf("couldn't get swagger handler: %v", handler.swaggerErr)
 	}
 
 	return handler

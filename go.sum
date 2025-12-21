@@ -19,6 +19,8 @@ github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.3 h1:NmZ1PKzSTQbuGHw9DGPFomqkkLW
 github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.3/go.mod h1:zQrxl1YP88HQlA6i9c63DSVPFklWpGX4OWAc9bFuaH4=
 github.com/invenlore/core v0.1.0 h1:wrNm3XVnmUtigPtGbcj8k0MXeOMgD9tORh/MJg3pEYs=
 github.com/invenlore/core v0.1.0/go.mod h1:Q8Ng1hQLgn6RhjWYpzyMTw/9DbFm6cq+cVOMS1yfhIg=
+github.com/invenlore/core v0.1.2 h1:nLyLQ1rwaUrKJPny+TxwxP51Hk89Cq55Iqp8SW9vyc8=
+github.com/invenlore/core v0.1.2/go.mod h1:Q8Ng1hQLgn6RhjWYpzyMTw/9DbFm6cq+cVOMS1yfhIg=
 github.com/invenlore/proto v1.3.7 h1:hG+ikF4fBJcmg9rplKNWMtKwVBAfQB2NAWVdDtGQy8s=
 github.com/invenlore/proto v1.3.7/go.mod h1:ptCcYw1BKHacVKYGt4ew2wVTI7xHBlNGw0kCsAm9HbM=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
