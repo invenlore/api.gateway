@@ -9,6 +9,8 @@ require (
 	google.golang.org/grpc v1.77.0
 )
 
+require golang.org/x/sync v0.19.0
+
 require (
 	github.com/alexliesenfeld/health v0.8.1 // indirect
 	github.com/caarlos0/env/v11 v11.3.1 // indirect

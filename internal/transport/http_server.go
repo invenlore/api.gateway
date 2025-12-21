@@ -16,65 +16,52 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-func StartHTTPServer(
-	ctx context.Context,
-	cfg *config.AppConfig,
-	errChan chan error,
-) (
-	*http.Server,
-	net.Listener,
-	error,
-) {
-	var wg sync.WaitGroup
-
+func NewHTTPServer(ctx context.Context, cfg *config.AppConfig) (*http.Server, net.Listener, func(), error) {
 	listenAddr := net.JoinHostPort(cfg.HTTP.Host, cfg.HTTP.Port)
 	logrus.Info("starting http server on ", listenAddr)
 
 	ln, err := net.Listen("tcp", listenAddr)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to listen on %s: %w", listenAddr, err)
+		return nil, nil, nil, fmt.Errorf("failed to listen on %s: %w", listenAddr, err)
 	}
 
 	mux := runtime.NewServeMux()
 
-	unaryClientInterceptors := []grpc.UnaryClientInterceptor{
-		logger.ClientRequestIDInterceptor,
-		logger.ClientLoggingInterceptor,
-	}
-
-	streamClientInterceptors := []grpc.StreamClientInterceptor{
-		logger.ClientStreamInterceptor,
-	}
-
 	dialOpts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithChainUnaryInterceptor(unaryClientInterceptors...),
-		grpc.WithChainStreamInterceptor(streamClientInterceptors...),
+		grpc.WithChainUnaryInterceptor(
+			logger.ClientRequestIDInterceptor,
+			logger.ClientLoggingInterceptor,
+		),
+		grpc.WithChainStreamInterceptor(
+			logger.ClientStreamInterceptor,
+		),
 	}
 
-	serviceConnections := make(map[string]*ServiceConnectionInfo)
+	var (
+		connMu sync.RWMutex
+		conns  = make(map[string]*ServiceConnectionInfo)
+	)
 
 	for _, service := range cfg.GRPCServices {
-		wg.Add(1)
+		s := service
 
-		go func(s *config.GRPCService) {
-			defer wg.Done()
+		sci := &ServiceConnectionInfo{
+			Config:        s,
+			Mux:           mux,
+			Registered:    false,
+			HealthTimeout: cfg.ServiceHealthTimeout,
+		}
 
-			sci := &ServiceConnectionInfo{
-				Config:        s,
-				Mux:           mux,
-				Registered:    false,
-				HealthTimeout: cfg.ServiceHealthTimeout,
-			}
+		connMu.Lock()
+		conns[s.Name] = sci
+		connMu.Unlock()
 
-			serviceConnections[s.Name] = sci
-			sci.StartHealthCheck(ctx, dialOpts)
-		}(service)
+		sci.StartHealthCheck(ctx, dialOpts)
 	}
 
-	wg.Wait()
-
 	combinedHandler := utils.NewCombinedHandler(ctx, mux)
+
 	server := &http.Server{
 		Addr:              listenAddr,
 		Handler:           combinedHandler,
@@ -84,25 +71,22 @@ func StartHTTPServer(
 		ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
 	}
 
-	go func() {
-		logrus.Infof("http server serving on %s", listenAddr)
+	cleanup := func() {
+		connMu.RLock()
 
-		if serveErr := server.Serve(ln); serveErr != nil && serveErr != http.ErrServerClosed {
-			errChan <- fmt.Errorf("http server failed to serve: %w", serveErr)
+		list := make([]*ServiceConnectionInfo, 0, len(conns))
+		for _, sci := range conns {
+			list = append(list, sci)
 		}
 
-		for _, sci := range serviceConnections {
-			if sci.Cancel != nil {
-				sci.Cancel()
-			}
+		connMu.RUnlock()
 
-			if sci.Conn != nil {
-				sci.Conn.Close()
-			}
+		for _, sci := range list {
+			sci.Close()
 		}
 
 		logrus.Debug("all gRPC client connections closed")
-	}()
+	}
 
-	return server, ln, nil
+	return server, ln, cleanup, nil
 }
