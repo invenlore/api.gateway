@@ -1,7 +1,6 @@
 package transport
 
 import (
-	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -11,13 +10,10 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func NewHealthServer(
-	_ context.Context,
-	cfg *config.AppConfig,
-) (*http.Server, net.Listener, error) {
+func NewHealthServer(cfg *config.HealthServerConfig) (*http.Server, net.Listener, error) {
 	var (
 		loggerEntry = logrus.WithField("scope", "health")
-		listenAddr  = net.JoinHostPort(cfg.Health.Host, cfg.Health.Port)
+		listenAddr  = net.JoinHostPort(cfg.Host, cfg.Port)
 	)
 
 	loggerEntry.Info("starting health server...")
@@ -33,10 +29,10 @@ func NewHealthServer(
 	server := &http.Server{
 		Addr:              listenAddr,
 		Handler:           mux,
-		ReadTimeout:       cfg.HTTP.ReadTimeout,
-		WriteTimeout:      cfg.HTTP.WriteTimeout,
-		IdleTimeout:       cfg.HTTP.IdleTimeout,
-		ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
+		ReadTimeout:       cfg.ReadTimeout,
+		WriteTimeout:      cfg.WriteTimeout,
+		IdleTimeout:       cfg.IdleTimeout,
+		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 	}
 
 	return server, ln, nil

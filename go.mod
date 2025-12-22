@@ -3,7 +3,7 @@ module github.com/invenlore/api.gateway
 go 1.24.0
 
 require (
-	github.com/invenlore/core v0.1.2
+	github.com/invenlore/core v0.1.3
 	github.com/invenlore/proto v1.3.7
 	github.com/sirupsen/logrus v1.9.3
 	google.golang.org/grpc v1.77.0

@@ -36,7 +36,7 @@ func Start() {
 		loggerEntry.Fatalf("http server init failed: %v", err)
 	}
 
-	healthSrv, healthLn, err := transport.NewHealthServer(ctx, cfg.GetConfig())
+	healthSrv, healthLn, err := transport.NewHealthServer(cfg.GetHealthConfig())
 	if err != nil {
 		_ = httpLn.Close()
 
