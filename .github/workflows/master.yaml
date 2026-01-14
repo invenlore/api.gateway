@@ -44,7 +44,6 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            invenlore/invenlore-api-gateway:stable
             invenlore/invenlore-api-gateway:master
             invenlore/invenlore-api-gateway:${{ github.event.release.tag_name }}
           cache-from: type=gha
