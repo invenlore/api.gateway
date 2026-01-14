@@ -5,3 +5,6 @@
 .env
 bin
 docker-compose.yaml
+
+#Ignore vscode AI rules
+.github/instructions/codacy.instructions.md

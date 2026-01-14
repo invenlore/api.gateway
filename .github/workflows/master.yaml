@@ -10,41 +10,35 @@ jobs:
     name: build new image on release
     runs-on: ubuntu-latest
     steps:
-      - name: get latest tag
-        uses: oprypin/find-latest-tag@v1
-        with:
-          repository: invenlore/api.gateway
-        id: get_tag
-
       - name: checkout service
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           repository: invenlore/api.gateway
-          ref: ${{ steps.get_tag.outputs.tag }}
+          ref: ${{ github.event.release.tag_name }}
 
       - name: login to docker hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: setup docker buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: setup go build cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: go-build-cache
           key: ${{ runner.os }}-go-build-cache-${{ hashFiles('**/go.sum') }}
 
       - name: inject go-build-cache
-        uses: reproducible-containers/buildkit-cache-dance@v2
+        uses: reproducible-containers/buildkit-cache-dance@a7e6c84254deea63f27ad452032d8fdd4815301a # v2
         with:
           cache-source: go-build-cache
 
       - name: build and push
         id: push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6
         with:
           context: .
           file: ./Dockerfile
@@ -52,16 +46,16 @@ jobs:
           tags: |
             invenlore/invenlore-api-gateway:stable
             invenlore/invenlore-api-gateway:master
-            invenlore/invenlore-api-gateway:${{ steps.get_tag.outputs.tag }}
+            invenlore/invenlore-api-gateway:${{ github.event.release.tag_name }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: dokploy update image
-        uses: jegork/dokploy-update-image-action@0.1.0
+        uses: jegork/dokploy-update-image-action@582d95db06f6581cb2af7739d977afff97c3c971 # 0.1.0
         with:
           token: ${{ secrets.DOKPLOY_AUTH_TOKEN }}
           application_id: ${{ secrets.DOKPLOY_APPLICATION_ID }}
-          image: invenlore/invenlore-api-gateway:${{ steps.get_tag.outputs.tag }}
+          image: invenlore/invenlore-api-gateway:${{ github.event.release.tag_name }}
           base_url: ${{ secrets.DOKPLOY_URL }}
 
       - name: dokploy deployment
