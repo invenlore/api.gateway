@@ -92,5 +92,5 @@ func Start() {
 		os.Exit(1)
 	}
 
-	loggerEntry.Info("gateway stopped gracefully")
+	loggerEntry.Debug("gateway stopped gracefully")
 }
