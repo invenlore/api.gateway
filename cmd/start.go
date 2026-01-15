@@ -10,11 +10,10 @@ import (
 	"syscall"
 	"time"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/invenlore/api.gateway/internal/transport"
 	"github.com/invenlore/core/pkg/config"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sync/errgroup"
 )
 
 func Start() {

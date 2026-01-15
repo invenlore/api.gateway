@@ -8,18 +8,17 @@ import (
 	"sync"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/invenlore/api.gateway/pkg/logger"
 	"github.com/invenlore/api.gateway/pkg/utils"
 	"github.com/invenlore/core/pkg/config"
-	"github.com/invenlore/core/pkg/logger"
+	corelogger "github.com/invenlore/core/pkg/logger"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
 
-func NewHTTPServer(
-	ctx context.Context,
-	cfg *config.AppConfig,
-) (*http.Server, net.Listener, func(), error) {
+func NewHTTPServer(ctx context.Context, cfg *config.AppConfig) (*http.Server, net.Listener, func(), error) {
 	var (
 		loggerEntry = logrus.WithField("scope", "httpServer")
 		listenAddr  = net.JoinHostPort(cfg.HTTP.Host, cfg.HTTP.Port)
@@ -32,16 +31,24 @@ func NewHTTPServer(
 		return nil, nil, nil, fmt.Errorf("failed to listen on %s: %w", listenAddr, err)
 	}
 
-	mux := runtime.NewServeMux()
+	mux := runtime.NewServeMux(
+		runtime.WithMetadata(func(_ context.Context, r *http.Request) metadata.MD {
+			if rid := r.Header.Get(logger.RequestIDHeader); rid != "" {
+				return metadata.Pairs("x-request-id", rid)
+			}
+
+			return nil
+		}),
+	)
 
 	dialOpts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithChainUnaryInterceptor(
-			logger.ClientRequestIDInterceptor,
-			logger.ClientLoggingInterceptor,
+			corelogger.ClientRequestIDInterceptor,
+			corelogger.ClientLoggingInterceptor,
 		),
 		grpc.WithChainStreamInterceptor(
-			logger.ClientStreamInterceptor,
+			corelogger.ClientStreamInterceptor,
 		),
 	}
 
@@ -67,11 +74,11 @@ func NewHTTPServer(
 		sci.StartHealthCheck(ctx, dialOpts)
 	}
 
-	combinedHandler := utils.NewCombinedHandler(ctx, mux)
+	httpHandler := logger.AccessLogMiddleware(utils.NewCombinedHandler(ctx, mux))
 
 	server := &http.Server{
 		Addr:              listenAddr,
-		Handler:           combinedHandler,
+		Handler:           httpHandler,
 		ReadTimeout:       cfg.HTTP.ReadTimeout,
 		WriteTimeout:      cfg.HTTP.WriteTimeout,
 		IdleTimeout:       cfg.HTTP.IdleTimeout,
