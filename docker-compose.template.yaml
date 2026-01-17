@@ -16,7 +16,7 @@ services:
       - HTTP_PORT=8080
       - HEALTH_PORT=80
       - SERVICE_HEALTH_TIMEOUT=30s
-      - USER_SERVICE_ENDPOINT=invenlore-user-service:8081
+      - IDENTITY_SERVICE_ENDPOINT=invenlore-identity-service:8081
     deploy:
       restart_policy:
         condition: on-failure

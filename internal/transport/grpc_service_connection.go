@@ -8,7 +8,7 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/invenlore/core/pkg/config"
-	"github.com/invenlore/proto/pkg/user"
+	"github.com/invenlore/proto/pkg/identity"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -129,10 +129,11 @@ func (sci *ServiceConnectionInfo) StartHealthCheck(ctx context.Context, dialOpts
 			checkCtx, checkCancel := context.WithTimeout(healthCtx, 5*time.Second)
 			var healthErr error
 
+			// All microservices here
 			switch serviceCfg.Name {
-			case "UserService":
-				userClient := user.NewUserServiceClient(conn)
-				_, healthErr = userClient.HealthCheck(checkCtx, &user.HealthRequest{})
+			case "IdentityService":
+				identityClient := identity.NewIdentityServiceClient(conn)
+				_, healthErr = identityClient.HealthCheck(checkCtx, &identity.HealthRequest{})
 			default:
 				loggerEntry.Tracef("skipping health check for unknown service: %s", serviceCfg.Name)
 			}

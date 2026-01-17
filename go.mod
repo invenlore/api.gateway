@@ -3,8 +3,8 @@ module github.com/invenlore/api.gateway
 go 1.24.11
 
 require (
-	github.com/invenlore/core v0.1.10
-	github.com/invenlore/proto v1.3.7
+	github.com/invenlore/core v0.1.11
+	github.com/invenlore/proto v1.3.8
 	github.com/sirupsen/logrus v1.9.4
 	google.golang.org/grpc v1.78.0
 )
