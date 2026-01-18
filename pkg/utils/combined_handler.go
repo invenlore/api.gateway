@@ -34,6 +34,12 @@ func (ch *CombinedHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if strings.HasPrefix(r.URL.Path, "/api/") {
+		http.Redirect(w, r, "/v1/", http.StatusMovedPermanently)
+
+		return
+	}
+
+	if isVersionedAPIPath(r.URL.Path) {
 		ch.mux.ServeHTTP(w, r)
 
 		return
@@ -46,6 +52,32 @@ func (ch *CombinedHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.NotFound(w, r)
+}
+
+func isVersionedAPIPath(path string) bool {
+	if !strings.HasPrefix(path, "/v") {
+		return false
+	}
+
+	trimmed := strings.TrimPrefix(path, "/")
+	segmentEnd := strings.Index(trimmed, "/")
+
+	if segmentEnd == -1 {
+		return false
+	}
+
+	segment := trimmed[:segmentEnd]
+	if len(segment) < 2 || segment[0] != 'v' {
+		return false
+	}
+
+	for i := 1; i < len(segment); i++ {
+		if segment[i] < '0' || segment[i] > '9' {
+			return false
+		}
+	}
+
+	return true
 }
 
 func getSwaggerUIHandler() (http.Handler, error) {
