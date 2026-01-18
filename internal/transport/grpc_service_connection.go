@@ -8,7 +8,7 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/invenlore/core/pkg/config"
-	"github.com/invenlore/proto/pkg/identity"
+	identity_v1 "github.com/invenlore/proto/pkg/identity/v1"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -132,8 +132,8 @@ func (sci *ServiceConnectionInfo) StartHealthCheck(ctx context.Context, dialOpts
 			// All microservices here
 			switch serviceCfg.Name {
 			case "IdentityService":
-				identityClient := identity.NewIdentityServiceClient(conn)
-				_, healthErr = identityClient.HealthCheck(checkCtx, &identity.HealthRequest{})
+				identityClient := identity_v1.NewIdentityServiceClient(conn)
+				_, healthErr = identityClient.HealthCheck(checkCtx, &identity_v1.HealthRequest{})
 			default:
 				loggerEntry.Tracef("skipping health check for unknown service: %s", serviceCfg.Name)
 			}
