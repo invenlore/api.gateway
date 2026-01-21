@@ -8,7 +8,11 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/invenlore/core/pkg/config"
+	common_v1 "github.com/invenlore/proto/pkg/common/v1"
 	identity_v1 "github.com/invenlore/proto/pkg/identity/v1"
+	media_v1 "github.com/invenlore/proto/pkg/media/v1"
+	search_v1 "github.com/invenlore/proto/pkg/search/v1"
+	wiki_v1 "github.com/invenlore/proto/pkg/wiki/v1"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -132,8 +136,20 @@ func (sci *ServiceConnectionInfo) StartHealthCheck(ctx context.Context, dialOpts
 			// All microservices here
 			switch serviceCfg.Name {
 			case "IdentityService":
-				identityClient := identity_v1.NewIdentityServiceClient(conn)
-				_, healthErr = identityClient.HealthCheck(checkCtx, &identity_v1.HealthRequest{})
+				client := identity_v1.NewIdentityInternalServiceClient(conn)
+				_, healthErr = client.HealthCheck(checkCtx, &common_v1.ServiceHealthRequest{})
+			case "WikiReadService":
+				client := wiki_v1.NewWikiReadServiceClient(conn)
+				_, healthErr = client.HealthCheck(checkCtx, &common_v1.ServiceHealthRequest{})
+			case "WikiWriteService":
+				client := wiki_v1.NewWikiWriteServiceClient(conn)
+				_, healthErr = client.HealthCheck(checkCtx, &common_v1.ServiceHealthRequest{})
+			case "MediaService":
+				client := media_v1.NewMediaServiceClient(conn)
+				_, healthErr = client.HealthCheck(checkCtx, &common_v1.ServiceHealthRequest{})
+			case "SearchService":
+				client := search_v1.NewSearchServiceClient(conn)
+				_, healthErr = client.HealthCheck(checkCtx, &common_v1.ServiceHealthRequest{})
 			default:
 				loggerEntry.Tracef("skipping health check for unknown service: %s", serviceCfg.Name)
 			}
@@ -172,23 +188,32 @@ func (sci *ServiceConnectionInfo) StartHealthCheck(ctx context.Context, dialOpts
 			loggerEntry.Debugf("service %s is healthy", serviceCfg.Name)
 
 			if !registered {
-				loggerEntry.Tracef("registering gRPC service handler for %s...", serviceCfg.Name)
+				loggerEntry.Tracef("registering gRPC service handlers for %s...", serviceCfg.Name)
 
-				if err := serviceCfg.Register(healthCtx, mux, conn); err != nil {
-					loggerEntry.Errorf(
-						"failed to register gRPC service handler for %s: %v",
-						serviceCfg.Name,
-						err,
-					)
+				for _, registerEntry := range serviceCfg.RegisterEntries {
+					if err := registerEntry.HandlerRegisterFunc(healthCtx, mux, conn); err != nil {
+						loggerEntry.Errorf(
+							"failed to register gRPC service handler '%s' for %s: %v",
+							registerEntry.HandlerName,
+							serviceCfg.Name,
+							err,
+						)
 
-					sci.dropConn(conn)
+						sci.dropConn(conn)
 
-					select {
-					case <-healthCtx.Done():
-						return
-					case <-ticker.C:
-						continue
+						select {
+						case <-healthCtx.Done():
+							return
+						case <-ticker.C:
+							continue
+						}
 					}
+
+					loggerEntry.Tracef(
+						"successfully registered gRPC service handler '%s' for %s...",
+						registerEntry.HandlerName,
+						serviceCfg.Name,
+					)
 				}
 
 				sci.mu.Lock()
