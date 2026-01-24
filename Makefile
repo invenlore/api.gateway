@@ -2,7 +2,7 @@
 
 fresh:
 	docker-compose down --remove-orphans
-	docker-compose up -d --build -V
+	docker-compose up -d --build
 
 run:
 	go build -o ./bin/api-gateway
