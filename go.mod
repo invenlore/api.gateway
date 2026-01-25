@@ -4,7 +4,7 @@ go 1.24.11
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.0
-	github.com/invenlore/core v0.2.2
+	github.com/invenlore/core v0.2.4
 	github.com/invenlore/proto v1.4.4
 	github.com/sirupsen/logrus v1.9.4
 	google.golang.org/grpc v1.78.0

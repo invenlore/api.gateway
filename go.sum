@@ -20,6 +20,10 @@ github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.5 h1:jP1RStw811EvUDzsUQ9oESqw2e4
 github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.5/go.mod h1:WXNBZ64q3+ZUemCMXD9kYnr56H7CgZxDBHCVwstfl3s=
 github.com/invenlore/core v0.2.2 h1:vAlpODB9/yLQTuywTBQMak2uaHZG9AAPmja+5aQ2sJ8=
 github.com/invenlore/core v0.2.2/go.mod h1:GoJN9CtQfMpuQlJXbCpFwcdYp56Gx9bGJVd03HlrrAk=
+github.com/invenlore/core v0.2.3 h1:eS93RQgmm92pf1axS/+gFDtqyBV13wkHwUcesBnT3A0=
+github.com/invenlore/core v0.2.3/go.mod h1:GoJN9CtQfMpuQlJXbCpFwcdYp56Gx9bGJVd03HlrrAk=
+github.com/invenlore/core v0.2.4 h1:9RfqN/M0ShtGAMYO0hf4//XwdNmgj+mvDRaq8RafVhc=
+github.com/invenlore/core v0.2.4/go.mod h1:GoJN9CtQfMpuQlJXbCpFwcdYp56Gx9bGJVd03HlrrAk=
 github.com/invenlore/proto v1.4.4 h1:w1EzRC7TXmsC+jOYKQUVf44RSvBRS+7AeVisdpmFN7Y=
 github.com/invenlore/proto v1.4.4/go.mod h1:DSu8QuRqq62BE9YlwRvy3SP8mHbnEV0xK3+ZSEujVrM=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
