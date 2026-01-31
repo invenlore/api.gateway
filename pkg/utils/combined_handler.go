@@ -1,11 +1,13 @@
 package utils
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"mime"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	third_party "github.com/invenlore/proto"
@@ -21,8 +23,10 @@ type CombinedHandler struct {
 
 func (ch *CombinedHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/api.swagger.json" {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(ch.swaggerJSON)
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+
+		http.ServeContent(w, r, "api.swagger.json", time.Time{}, bytes.NewReader(ch.swaggerJSON))
 
 		return
 	}
