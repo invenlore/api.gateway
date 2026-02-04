@@ -5,7 +5,7 @@ go 1.24.12
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/invenlore/core v0.2.5
-	github.com/invenlore/proto v1.4.5
+	github.com/invenlore/proto v1.4.7
 	github.com/sirupsen/logrus v1.9.4
 	google.golang.org/grpc v1.78.0
 )
@@ -20,7 +20,7 @@ require (
 	golang.org/x/net v0.49.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/text v0.33.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20260128011058-8636f8732409 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260128011058-8636f8732409
+	google.golang.org/genproto/googleapis/api v0.0.0-20260203192932-546029d2fa20 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260203192932-546029d2fa20
 	google.golang.org/protobuf v1.36.11
 )

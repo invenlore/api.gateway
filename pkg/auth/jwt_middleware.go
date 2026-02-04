@@ -19,11 +19,16 @@ const (
 	HeaderAuthorization = "Authorization"
 	HeaderUserID        = "X-User-Id"
 	HeaderUserRoles     = "X-Roles"
+	HeaderUserPerms     = "X-Perms-Global"
+	HeaderUserScopes    = "X-Scopes"
 	HeaderIdempotency   = "X-Idempotency-Key"
 )
 
 type Claims struct {
-	Roles []string `json:"roles"`
+	Roles        []string `json:"roles"`
+	PermsGlobal  []string `json:"perms_global"`
+	PermsProject []string `json:"perms_project"`
+	Scopes       []string `json:"scopes"`
 	jwt.RegisteredClaims
 }
 
@@ -84,10 +89,73 @@ func (m *Middleware) Handler(next http.Handler) http.Handler {
 			if len(claims.Roles) > 0 {
 				r.Header.Set(HeaderUserRoles, strings.Join(claims.Roles, ","))
 			}
+
+			if len(claims.PermsGlobal) > 0 {
+				r.Header.Set(HeaderUserPerms, strings.Join(claims.PermsGlobal, ","))
+			}
+
+			if len(claims.Scopes) > 0 {
+				r.Header.Set(HeaderUserScopes, strings.Join(claims.Scopes, ","))
+			}
+		}
+
+		if !m.isAuthorizedForPath(r.URL.Path, claims) {
+			st := status.New(codes.PermissionDenied, "forbidden")
+
+			WriteErrorResponse(w, r, st)
+			return
 		}
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (m *Middleware) isAuthorizedForPath(path string, claims *Claims) bool {
+	if isSwaggerPath(path) {
+		return hasGlobalPermission(claims, "gateway.swagger.read")
+	}
+
+	if !strings.HasPrefix(path, "/v1/admin/") {
+		return true
+	}
+
+	return hasGlobalPermission(claims, "identity.*")
+}
+
+func hasGlobalPermission(claims *Claims, permission string) bool {
+	if claims == nil {
+		return false
+	}
+
+	for _, perm := range claims.PermsGlobal {
+		if perm == permission {
+			return true
+		}
+
+		if perm == "identity.all" {
+			return true
+		}
+
+		if strings.HasSuffix(permission, ".*") {
+			continue
+		}
+
+		if strings.HasSuffix(perm, ".*") {
+			if strings.HasPrefix(permission, strings.TrimSuffix(perm, ".*")) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func isSwaggerPath(path string) bool {
+	if path == "/api.swagger.json" || path == "/swagger" {
+		return true
+	}
+
+	return strings.HasPrefix(path, "/swagger/")
 }
 
 func (m *Middleware) authenticate(ctx context.Context, r *http.Request) (*Claims, error) {
@@ -109,9 +177,10 @@ func (m *Middleware) authenticate(ctx context.Context, r *http.Request) (*Claims
 	parser := jwt.NewParser(jwt.WithLeeway(m.allowedSkew))
 	claims := &Claims{}
 
-	_, err := parser.ParseWithClaims(parts[1], claims, func(token *jwt.Token) (interface{}, error) {
+	_, err := parser.ParseWithClaims(parts[1], claims, func(token *jwt.Token) (any, error) {
 		return m.resolveKey(ctx, token)
 	})
+
 	if err != nil {
 		return nil, err
 	}
@@ -151,6 +220,7 @@ func (m *Middleware) resolveKey(ctx context.Context, token *jwt.Token) (interfac
 
 func (m *Middleware) writeAuthError(w http.ResponseWriter, r *http.Request, err error) {
 	message := "unauthorized"
+
 	if errors.Is(err, errTokenMissing) {
 		message = "authorization token missing"
 	} else if errors.Is(err, errTokenInvalid) {

@@ -52,6 +52,14 @@ func NewHTTPServer(ctx context.Context, cfg *config.AppConfig) (*http.Server, ne
 				pairs = append(pairs, "x-roles", roles)
 			}
 
+			if perms := r.Header.Get(auth.HeaderUserPerms); perms != "" {
+				pairs = append(pairs, "x-perms-global", perms)
+			}
+
+			if scopes := r.Header.Get(auth.HeaderUserScopes); scopes != "" {
+				pairs = append(pairs, "x-scopes", scopes)
+			}
+
 			if idempotency := r.Header.Get(auth.HeaderIdempotency); idempotency != "" {
 				pairs = append(pairs, "x-idempotency-key", idempotency)
 			}
