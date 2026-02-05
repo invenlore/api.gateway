@@ -1,15 +1,20 @@
 package transport
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/invenlore/api.gateway/pkg/auth"
 	"github.com/invenlore/api.gateway/pkg/logger"
+	"github.com/invenlore/api.gateway/pkg/ui"
 	"github.com/invenlore/api.gateway/pkg/utils"
 	"github.com/invenlore/core/pkg/config"
 	corelogger "github.com/invenlore/core/pkg/logger"
@@ -18,6 +23,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 func NewHTTPServer(ctx context.Context, cfg *config.AppConfig) (*http.Server, net.Listener, func(), error) {
@@ -128,13 +134,37 @@ func NewHTTPServer(ctx context.Context, cfg *config.AppConfig) (*http.Server, ne
 				"/v1/auth/login",
 				"/v1/auth/refresh",
 				"/v1/auth/logout",
+				"/v1/auth/oauth/github/start",
+				"/v1/auth/oauth/github/callback",
+				"/login",
 			},
 		})
 
 		authHandler = middleware.Handler(authHandler)
 	}
 
-	httpHandler := logger.AccessLogMiddleware(authHandler)
+	loginHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+
+		_, _ = w.Write([]byte(ui.LoginHTML()))
+	})
+
+	csrfMiddleware := auth.CSRFMiddleware{}
+
+	loginMux := http.NewServeMux()
+	loginMux.Handle("/login", loginHandler)
+	loginMux.Handle("/v1/auth/oauth/github/start", oauthStartHandler(authHandler))
+	loginMux.Handle("/v1/auth/oauth/github/callback", oauthCallbackHandler(authHandler, cfg))
+
+	loginMux.Handle("/", csrfMiddleware.Handler(authHandler))
+
+	httpHandler := logger.AccessLogMiddleware(loginMux)
 
 	server := &http.Server{
 		Addr:              listenAddr,
@@ -167,6 +197,162 @@ func NewHTTPServer(ctx context.Context, cfg *config.AppConfig) (*http.Server, ne
 	}
 
 	return server, ln, cleanup, nil
+}
+
+type responseCapture struct {
+	header     http.Header
+	statusCode int
+	body       bytes.Buffer
+}
+
+func newResponseCapture() *responseCapture {
+	return &responseCapture{header: make(http.Header)}
+}
+
+func (r *responseCapture) Header() http.Header {
+	return r.header
+}
+
+func (r *responseCapture) WriteHeader(statusCode int) {
+	r.statusCode = statusCode
+}
+
+func (r *responseCapture) Write(p []byte) (int, error) {
+	if r.statusCode == 0 {
+		r.statusCode = http.StatusOK
+	}
+
+	return r.body.Write(p)
+}
+
+func (r *responseCapture) writeTo(w http.ResponseWriter) {
+	for key, values := range r.header {
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+
+	if r.statusCode != 0 {
+		w.WriteHeader(r.statusCode)
+	}
+
+	if r.body.Len() > 0 {
+		_, _ = w.Write(r.body.Bytes())
+	}
+}
+
+func oauthStartHandler(authHandler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		req := r.Clone(r.Context())
+
+		query := req.URL.Query()
+		query.Set("provider", "OAUTH_PROVIDER_GITHUB")
+
+		req.URL.RawQuery = query.Encode()
+
+		responseRecorder := newResponseCapture()
+		authHandler.ServeHTTP(responseRecorder, req)
+		if responseRecorder.statusCode == 0 {
+			responseRecorder.statusCode = http.StatusOK
+		}
+		if responseRecorder.statusCode >= 300 {
+			responseRecorder.writeTo(w)
+			return
+		}
+		if responseRecorder.body.Len() == 0 {
+			responseRecorder.writeTo(w)
+			return
+		}
+
+		var payload identity_v1.StartOAuthResponse
+		if err := protojson.Unmarshal(responseRecorder.body.Bytes(), &payload); err != nil {
+			responseRecorder.writeTo(w)
+			return
+		}
+		if strings.TrimSpace(payload.AuthorizationUrl) == "" {
+			responseRecorder.writeTo(w)
+			return
+		}
+		http.Redirect(w, r, payload.AuthorizationUrl, http.StatusFound)
+	})
+}
+
+func oauthCallbackHandler(authHandler http.Handler, cfg *config.AppConfig) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		req := r.Clone(r.Context())
+
+		query := req.URL.Query()
+		query.Set("provider", "OAUTH_PROVIDER_GITHUB")
+
+		req.URL.RawQuery = query.Encode()
+
+		responseRecorder := newResponseCapture()
+		authHandler.ServeHTTP(responseRecorder, req)
+
+		if responseRecorder.statusCode == 0 {
+			responseRecorder.statusCode = http.StatusOK
+		}
+
+		if responseRecorder.statusCode >= 300 {
+			responseRecorder.writeTo(w)
+			return
+		}
+
+		if responseRecorder.body.Len() == 0 {
+			responseRecorder.writeTo(w)
+			return
+		}
+
+		var payload identity_v1.CompleteOAuthResponse
+		if err := protojson.Unmarshal(responseRecorder.body.Bytes(), &payload); err != nil {
+			responseRecorder.writeTo(w)
+			return
+		}
+
+		setAuthCookies(w, &payload, cfg.AppEnv)
+		redirect := payload.RedirectUri
+
+		if redirect == "" {
+			redirect = "/swagger/"
+		}
+
+		http.Redirect(w, r, redirect, http.StatusFound)
+	})
+}
+
+func setAuthCookies(w http.ResponseWriter, payload *identity_v1.CompleteOAuthResponse, appEnv config.AppEnv) {
+	if payload == nil {
+		return
+	}
+
+	if strings.TrimSpace(payload.AccessToken) != "" {
+		http.SetCookie(w, buildCookie(auth.CookieAccessToken, payload.AccessToken, "/", appEnv, true))
+	}
+
+	if strings.TrimSpace(payload.RefreshToken) != "" {
+		http.SetCookie(w, buildCookie(auth.CookieRefreshToken, payload.RefreshToken, "/v1/auth/refresh", appEnv, true))
+	}
+
+	csrf := randomToken(32)
+	http.SetCookie(w, buildCookie(auth.CookieCSRFToken, csrf, "/", appEnv, false))
+}
+
+func buildCookie(name, value, path string, appEnv config.AppEnv, httpOnly bool) *http.Cookie {
+	return &http.Cookie{
+		Name:     name,
+		Value:    value,
+		Path:     path,
+		HttpOnly: httpOnly,
+		Secure:   appEnv == config.AppEnvProduction,
+		SameSite: http.SameSiteLaxMode,
+	}
+}
+
+func randomToken(length int) string {
+	buf := make([]byte, length)
+	_, _ = rand.Read(buf)
+
+	return base64.RawURLEncoding.EncodeToString(buf)
 }
 
 func dialIdentityConn(services []*config.GRPCService, dialOpts []grpc.DialOption) (*grpc.ClientConn, error) {

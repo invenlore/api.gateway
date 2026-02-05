@@ -75,10 +75,14 @@ func (m *Middleware) Handler(next http.Handler) http.Handler {
 
 		ctx := r.Context()
 
-		claims, err := m.authenticate(ctx, r)
+		claims, source, err := m.authenticate(ctx, r)
 		if err != nil {
 			m.writeAuthError(w, r, err)
 			return
+		}
+
+		if source == AuthSourceCookie {
+			r = r.WithContext(WithAuthSource(r.Context(), source))
 		}
 
 		if claims != nil {
@@ -158,34 +162,61 @@ func isSwaggerPath(path string) bool {
 	return strings.HasPrefix(path, "/swagger/")
 }
 
-func (m *Middleware) authenticate(ctx context.Context, r *http.Request) (*Claims, error) {
+func (m *Middleware) authenticate(ctx context.Context, r *http.Request) (*Claims, AuthSource, error) {
 	rawToken := strings.TrimSpace(r.Header.Get(HeaderAuthorization))
 	if rawToken == "" {
-		if m.requireToken {
-			return nil, errTokenMissing
+		if cookieToken, ok := readBearerFromCookie(r); ok {
+			claims, err := m.parseToken(ctx, cookieToken)
+			if err != nil {
+				return nil, "", err
+			}
+
+			r.Header.Set(HeaderAuthorization, "Bearer "+cookieToken)
+			return claims, AuthSourceCookie, nil
 		}
 
-		return nil, nil
+		if m.requireToken {
+			return nil, "", errTokenMissing
+		}
+
+		return nil, "", nil
 	}
 
 	parts := strings.SplitN(rawToken, " ", 2)
 
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-		return nil, errTokenInvalid
+		return nil, "", errTokenInvalid
 	}
 
+	claims, err := m.parseToken(ctx, parts[1])
+	return claims, "", err
+}
+
+func (m *Middleware) parseToken(ctx context.Context, token string) (*Claims, error) {
 	parser := jwt.NewParser(jwt.WithLeeway(m.allowedSkew))
 	claims := &Claims{}
 
-	_, err := parser.ParseWithClaims(parts[1], claims, func(token *jwt.Token) (any, error) {
+	_, err := parser.ParseWithClaims(token, claims, func(token *jwt.Token) (any, error) {
 		return m.resolveKey(ctx, token)
 	})
-
 	if err != nil {
 		return nil, err
 	}
 
 	return claims, nil
+}
+
+func readBearerFromCookie(r *http.Request) (string, bool) {
+	if r == nil {
+		return "", false
+	}
+
+	cookie, err := r.Cookie(CookieAccessToken)
+	if err != nil || strings.TrimSpace(cookie.Value) == "" {
+		return "", false
+	}
+
+	return strings.TrimSpace(cookie.Value), true
 }
 
 func (m *Middleware) resolveKey(ctx context.Context, token *jwt.Token) (interface{}, error) {
@@ -227,8 +258,30 @@ func (m *Middleware) writeAuthError(w http.ResponseWriter, r *http.Request, err 
 		message = "invalid authorization token"
 	}
 
+	if shouldRedirectToLogin(r) {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+
 	st := status.New(codes.Unauthenticated, message)
 	WriteErrorResponse(w, r, st)
+}
+
+func shouldRedirectToLogin(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+
+	if r.Method != http.MethodGet {
+		return false
+	}
+
+	if !isSwaggerPath(r.URL.Path) {
+		return false
+	}
+
+	accept := r.Header.Get("Accept")
+	return strings.Contains(accept, "text/html") || accept == ""
 }
 
 var (
