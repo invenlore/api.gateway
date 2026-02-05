@@ -341,6 +341,7 @@ func setAuthCookies(w http.ResponseWriter, payload *identity_v1.CompleteOAuthRes
 }
 
 func buildCookieHTTPOnly(name, value, path string, appEnv config.AppEnv) *http.Cookie {
+	//nolint:gosec // Secure flag is enforced in production only; local/dev uses http.
 	return &http.Cookie{
 		Name:     name,
 		Value:    value,
@@ -352,6 +353,7 @@ func buildCookieHTTPOnly(name, value, path string, appEnv config.AppEnv) *http.C
 }
 
 func buildCookieCSRF(name, value, path string, appEnv config.AppEnv) *http.Cookie {
+	//nolint:gosec // CSRF cookie must be readable by JS; Secure flag is enforced in production only.
 	return &http.Cookie{
 		Name:     name,
 		Value:    value,
