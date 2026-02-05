@@ -199,6 +199,7 @@ func (m *Middleware) parseToken(ctx context.Context, token string) (*Claims, err
 	_, err := parser.ParseWithClaims(token, claims, func(token *jwt.Token) (any, error) {
 		return m.resolveKey(ctx, token)
 	})
+
 	if err != nil {
 		return nil, err
 	}

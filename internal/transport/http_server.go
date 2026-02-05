@@ -6,6 +6,8 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"html/template"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -152,7 +154,8 @@ func NewHTTPServer(ctx context.Context, cfg *config.AppConfig) (*http.Server, ne
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
 
-		_, _ = w.Write([]byte(ui.LoginHTML()))
+		loginTemplate := template.Must(template.New("login").Parse(ui.LoginHTML()))
+		_ = loginTemplate.Execute(w, nil)
 	})
 
 	csrfMiddleware := auth.CSRFMiddleware{}
@@ -237,7 +240,7 @@ func (r *responseCapture) writeTo(w http.ResponseWriter) {
 	}
 
 	if r.body.Len() > 0 {
-		_, _ = w.Write(r.body.Bytes())
+		_, _ = io.Copy(w, bytes.NewReader(r.body.Bytes()))
 	}
 }
 
@@ -326,23 +329,34 @@ func setAuthCookies(w http.ResponseWriter, payload *identity_v1.CompleteOAuthRes
 	}
 
 	if strings.TrimSpace(payload.AccessToken) != "" {
-		http.SetCookie(w, buildCookie(auth.CookieAccessToken, payload.AccessToken, "/", appEnv, true))
+		http.SetCookie(w, buildCookieHTTPOnly(auth.CookieAccessToken, payload.AccessToken, "/", appEnv))
 	}
 
 	if strings.TrimSpace(payload.RefreshToken) != "" {
-		http.SetCookie(w, buildCookie(auth.CookieRefreshToken, payload.RefreshToken, "/v1/auth/refresh", appEnv, true))
+		http.SetCookie(w, buildCookieHTTPOnly(auth.CookieRefreshToken, payload.RefreshToken, "/v1/auth/refresh", appEnv))
 	}
 
 	csrf := randomToken(32)
-	http.SetCookie(w, buildCookie(auth.CookieCSRFToken, csrf, "/", appEnv, false))
+	http.SetCookie(w, buildCookieCSRF(auth.CookieCSRFToken, csrf, "/", appEnv))
 }
 
-func buildCookie(name, value, path string, appEnv config.AppEnv, httpOnly bool) *http.Cookie {
+func buildCookieHTTPOnly(name, value, path string, appEnv config.AppEnv) *http.Cookie {
 	return &http.Cookie{
 		Name:     name,
 		Value:    value,
 		Path:     path,
-		HttpOnly: httpOnly,
+		HttpOnly: true,
+		Secure:   appEnv == config.AppEnvProduction,
+		SameSite: http.SameSiteLaxMode,
+	}
+}
+
+func buildCookieCSRF(name, value, path string, appEnv config.AppEnv) *http.Cookie {
+	return &http.Cookie{
+		Name:     name,
+		Value:    value,
+		Path:     path,
+		HttpOnly: false,
 		Secure:   appEnv == config.AppEnvProduction,
 		SameSite: http.SameSiteLaxMode,
 	}
