@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"github.com/invenlore/api.gateway/internal/transport"
+	gatewaymetrics "github.com/invenlore/api.gateway/pkg/metrics"
 	"github.com/invenlore/core/pkg/config"
+	coremetrics "github.com/invenlore/core/pkg/metrics"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
@@ -30,7 +32,34 @@ func Start() {
 
 	g, ctx := errgroup.WithContext(baseCtx)
 
-	httpSrv, httpLn, httpCleanup, err := transport.NewHTTPServer(ctx, cfg.GetConfig())
+	appCfg := cfg.GetConfig()
+	serviceName := appCfg.ServiceName
+	if serviceName == "" {
+		serviceName = "gateway"
+	}
+	serviceVersion := appCfg.ServiceVersion
+	if serviceVersion == "" {
+		serviceVersion = "unknown"
+	}
+
+	loggerEntry.WithFields(logrus.Fields{
+		"service": serviceName,
+		"version": serviceVersion,
+		"env":     appCfg.AppEnv,
+	}).Info("gateway configuration loaded")
+
+	metricsRegistry := coremetrics.NewRegistry(serviceName, appCfg.AppEnv, serviceVersion)
+	metricsCollector := gatewaymetrics.NewGatewayMetrics(metricsRegistry)
+
+	metricsMux := http.NewServeMux()
+	metricsMux.Handle("GET /metrics", metricsRegistry.Handler())
+
+	metricsSrv, metricsLn, err := coremetrics.StartMetricsServer(appCfg.GetMetricsConfig(), metricsMux)
+	if err != nil {
+		loggerEntry.Fatalf("metrics server init failed: %v", err)
+	}
+
+	httpSrv, httpLn, httpCleanup, err := transport.NewHTTPServer(ctx, cfg.GetConfig(), metricsCollector)
 	if err != nil {
 		loggerEntry.Fatalf("http server init failed: %v", err)
 	}
@@ -67,6 +96,16 @@ func Start() {
 	})
 
 	g.Go(func() error {
+		loggerEntry.Infof("metrics server serving on %s...", metricsSrv.Addr)
+
+		if err := metricsSrv.Serve(metricsLn); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return fmt.Errorf("metrics serve failed: %w", err)
+		}
+
+		return nil
+	})
+
+	g.Go(func() error {
 		<-ctx.Done()
 
 		loggerEntry.Trace("attempting graceful shutdown...")
@@ -76,6 +115,7 @@ func Start() {
 
 		_ = healthSrv.Shutdown(stopCtx)
 		_ = httpSrv.Shutdown(stopCtx)
+		_ = metricsSrv.Shutdown(stopCtx)
 
 		if httpCleanup != nil {
 			httpCleanup()

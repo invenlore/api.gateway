@@ -9,7 +9,19 @@ import (
 
 type CSRFMiddleware struct{}
 
+type CSRFMetrics interface {
+	IncAuthDenied(reason string)
+}
+
+type CSRFMiddlewareWithMetrics struct {
+	Metrics CSRFMetrics
+}
+
 func (m CSRFMiddleware) Handler(next http.Handler) http.Handler {
+	return CSRFMiddlewareWithMetrics{Metrics: nil}.Handler(next)
+}
+
+func (m CSRFMiddlewareWithMetrics) Handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r == nil {
 			next.ServeHTTP(w, r)
@@ -28,12 +40,20 @@ func (m CSRFMiddleware) Handler(next http.Handler) http.Handler {
 
 		csrfCookie, err := r.Cookie(CookieCSRFToken)
 		if err != nil || csrfCookie.Value == "" {
+			if m.Metrics != nil {
+				m.Metrics.IncAuthDenied("csrf")
+			}
+
 			WriteErrorResponse(w, r, statusUnauthenticated("csrf token missing"))
 			return
 		}
 
 		csrfHeader := r.Header.Get(HeaderCSRFTOKEN)
 		if csrfHeader == "" || csrfHeader != csrfCookie.Value {
+			if m.Metrics != nil {
+				m.Metrics.IncAuthDenied("csrf")
+			}
+
 			WriteErrorResponse(w, r, statusPermissionDenied("csrf token invalid"))
 			return
 		}

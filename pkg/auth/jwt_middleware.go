@@ -42,6 +42,7 @@ type Middleware struct {
 	allowedSkew  time.Duration
 	publicPaths  map[string]struct{}
 	requireToken bool
+	metrics      AuthMetrics
 }
 
 type MiddlewareConfig struct {
@@ -49,6 +50,11 @@ type MiddlewareConfig struct {
 	AllowedSkew  time.Duration
 	PublicPaths  []string
 	RequireToken bool
+	Metrics      AuthMetrics
+}
+
+type AuthMetrics interface {
+	IncAuthDenied(reason string)
 }
 
 func NewMiddleware(cfg MiddlewareConfig) *Middleware {
@@ -63,6 +69,7 @@ func NewMiddleware(cfg MiddlewareConfig) *Middleware {
 		allowedSkew:  cfg.AllowedSkew,
 		publicPaths:  paths,
 		requireToken: cfg.RequireToken,
+		metrics:      cfg.Metrics,
 	}
 }
 
@@ -77,6 +84,7 @@ func (m *Middleware) Handler(next http.Handler) http.Handler {
 
 		claims, source, err := m.authenticate(ctx, r)
 		if err != nil {
+			m.recordDenied(err)
 			m.writeAuthError(w, r, err)
 			return
 		}
@@ -104,6 +112,7 @@ func (m *Middleware) Handler(next http.Handler) http.Handler {
 		}
 
 		if !m.isAuthorizedForPath(r.URL.Path, claims) {
+			m.recordDenied(status.Error(codes.PermissionDenied, "forbidden"))
 			st := status.New(codes.PermissionDenied, "forbidden")
 
 			WriteErrorResponse(w, r, st)
@@ -266,6 +275,27 @@ func (m *Middleware) writeAuthError(w http.ResponseWriter, r *http.Request, err 
 
 	st := status.New(codes.Unauthenticated, message)
 	WriteErrorResponse(w, r, st)
+}
+
+func (m *Middleware) recordDenied(err error) {
+	if m.metrics == nil {
+		return
+	}
+
+	if errors.Is(err, errTokenMissing) {
+		m.metrics.IncAuthDenied("missing_token")
+		return
+	}
+	if errors.Is(err, errTokenInvalid) {
+		m.metrics.IncAuthDenied("invalid_signature")
+		return
+	}
+	if st, ok := status.FromError(err); ok {
+		if st.Code() == codes.PermissionDenied {
+			m.metrics.IncAuthDenied("insufficient_roles")
+			return
+		}
+	}
 }
 
 func shouldRedirectToLogin(r *http.Request) bool {

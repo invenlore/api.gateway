@@ -13,8 +13,11 @@ services:
     environment:
       - APP_ENV=dev
       - APP_LOG_LEVEL=DEBUG
+      - SERVICE_NAME=gateway
+      - SERVICE_VERSION=dev
       - HTTP_PORT=8080
       - HEALTH_PORT=80
+      - METRICS_PORT=9090
       - SERVICE_HEALTH_TIMEOUT=30s
       - IDENTITY_SERVICE_ENDPOINT=invenlore-identity-service:8081
     deploy:

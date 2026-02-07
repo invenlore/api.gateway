@@ -22,9 +22,15 @@ type JWKSCache struct {
 	provider  JWKSProvider
 	ttl       time.Duration
 	logger    *logrus.Entry
+	metrics   JWKSCacheMetrics
 	mu        sync.RWMutex
 	cached    *identity_v1.JWKSet
 	expiresAt time.Time
+}
+
+type JWKSCacheMetrics interface {
+	ObserveJWKSRefresh(success bool)
+	SetJWKSCacheAge(age time.Duration)
 }
 
 func NewJWKSCache(provider JWKSProvider, ttl time.Duration) *JWKSCache {
@@ -35,6 +41,13 @@ func NewJWKSCache(provider JWKSProvider, ttl time.Duration) *JWKSCache {
 	}
 }
 
+func NewJWKSCacheWithMetrics(provider JWKSProvider, ttl time.Duration, metrics JWKSCacheMetrics) *JWKSCache {
+	cache := NewJWKSCache(provider, ttl)
+	cache.metrics = metrics
+
+	return cache
+}
+
 func (c *JWKSCache) Get(ctx context.Context) (*identity_v1.JWKSet, error) {
 	c.mu.RLock()
 	cached := c.cached
@@ -42,6 +55,10 @@ func (c *JWKSCache) Get(ctx context.Context) (*identity_v1.JWKSet, error) {
 	c.mu.RUnlock()
 
 	if cached != nil && time.Now().Before(expiresAt) {
+		if c.metrics != nil {
+			c.metrics.SetJWKSCacheAge(time.Since(expiresAt.Add(-c.ttl)))
+		}
+
 		return cached, nil
 	}
 
@@ -49,12 +66,19 @@ func (c *JWKSCache) Get(ctx context.Context) (*identity_v1.JWKSet, error) {
 	defer c.mu.Unlock()
 
 	if c.cached != nil && time.Now().Before(c.expiresAt) {
+		if c.metrics != nil {
+			c.metrics.SetJWKSCacheAge(time.Since(c.expiresAt.Add(-c.ttl)))
+		}
+
 		return c.cached, nil
 	}
 
 	jwks, err := c.provider.GetJWKS(ctx)
 	if err != nil {
 		c.logger.WithError(err).Error("failed to fetch JWKS")
+		if c.metrics != nil {
+			c.metrics.ObserveJWKSRefresh(false)
+		}
 
 		if c.cached != nil {
 			return c.cached, nil
@@ -64,11 +88,20 @@ func (c *JWKSCache) Get(ctx context.Context) (*identity_v1.JWKSet, error) {
 	}
 
 	if jwks == nil || len(jwks.Keys) == 0 {
+		if c.metrics != nil {
+			c.metrics.ObserveJWKSRefresh(false)
+		}
+
 		return nil, errJWKSUnavailable
 	}
 
 	c.cached = jwks
 	c.expiresAt = time.Now().Add(c.ttl)
+
+	if c.metrics != nil {
+		c.metrics.ObserveJWKSRefresh(true)
+		c.metrics.SetJWKSCacheAge(0)
+	}
 
 	return jwks, nil
 }

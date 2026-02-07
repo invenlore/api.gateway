@@ -16,6 +16,7 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/invenlore/api.gateway/pkg/auth"
 	"github.com/invenlore/api.gateway/pkg/logger"
+	gatewaymetrics "github.com/invenlore/api.gateway/pkg/metrics"
 	"github.com/invenlore/api.gateway/pkg/ui"
 	"github.com/invenlore/api.gateway/pkg/utils"
 	"github.com/invenlore/core/pkg/config"
@@ -28,7 +29,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
-func NewHTTPServer(ctx context.Context, cfg *config.AppConfig) (*http.Server, net.Listener, func(), error) {
+func NewHTTPServer(ctx context.Context, cfg *config.AppConfig, metricsCollector *gatewaymetrics.GatewayMetrics) (*http.Server, net.Listener, func(), error) {
 	var (
 		loggerEntry = logrus.WithField("scope", "httpServer")
 		listenAddr  = net.JoinHostPort(cfg.HTTP.Host, cfg.HTTP.Port)
@@ -80,15 +81,28 @@ func NewHTTPServer(ctx context.Context, cfg *config.AppConfig) (*http.Server, ne
 		}),
 	)
 
-	dialOpts := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithChainUnaryInterceptor(
-			corelogger.ClientRequestIDInterceptor,
-			corelogger.ClientLoggingInterceptor,
-		),
-		grpc.WithChainStreamInterceptor(
-			corelogger.ClientStreamInterceptor,
-		),
+	baseUnaryInterceptors := []grpc.UnaryClientInterceptor{
+		corelogger.ClientRequestIDInterceptor,
+		corelogger.ClientLoggingInterceptor,
+	}
+
+	baseStreamInterceptors := []grpc.StreamClientInterceptor{
+		corelogger.ClientStreamInterceptor,
+	}
+
+	buildDialOpts := func(serviceName string) []grpc.DialOption {
+		unary := make([]grpc.UnaryClientInterceptor, 0, len(baseUnaryInterceptors)+1)
+		unary = append(unary, baseUnaryInterceptors...)
+
+		if metricsCollector != nil && serviceName != "" {
+			unary = append(unary, metricsCollector.GRPCClientInterceptor(serviceName))
+		}
+
+		return []grpc.DialOption{
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithChainUnaryInterceptor(unary...),
+			grpc.WithChainStreamInterceptor(baseStreamInterceptors...),
+		}
 	}
 
 	var (
@@ -112,10 +126,10 @@ func NewHTTPServer(ctx context.Context, cfg *config.AppConfig) (*http.Server, ne
 		conns[s.Name] = sci
 		connMu.Unlock()
 
-		sci.StartHealthCheck(ctx, dialOpts)
+		sci.StartHealthCheck(ctx, buildDialOpts(s.Name))
 	}
 
-	identityConn, identityConnErr = dialIdentityConn(cfg.GRPCServices, dialOpts)
+	identityConn, identityConnErr = dialIdentityConn(cfg.GRPCServices, buildDialOpts("IdentityService"))
 	if identityConnErr != nil {
 		loggerEntry.WithError(identityConnErr).Error("identity jwks provider disabled")
 	}
@@ -124,13 +138,14 @@ func NewHTTPServer(ctx context.Context, cfg *config.AppConfig) (*http.Server, ne
 
 	if identityConn != nil {
 		jwksProvider := auth.NewIdentityJWKSProvider(identity_v1.NewIdentityInternalServiceClient(identityConn))
-		jwksCache := auth.NewJWKSCache(jwksProvider, cfg.Auth.JWKSCacheTTL)
+		jwksCache := auth.NewJWKSCacheWithMetrics(jwksProvider, cfg.Auth.JWKSCacheTTL, metricsCollector)
 		jwksFetcher := auth.NewJWKSCacheFetcher(jwksCache)
 
 		middleware := auth.NewMiddleware(auth.MiddlewareConfig{
 			JWKSFetcher:  jwksFetcher,
 			AllowedSkew:  cfg.Auth.JWTAllowedSkew,
 			RequireToken: true,
+			Metrics:      metricsCollector,
 			PublicPaths: []string{
 				"/v1/auth/register",
 				"/v1/auth/login",
@@ -158,7 +173,7 @@ func NewHTTPServer(ctx context.Context, cfg *config.AppConfig) (*http.Server, ne
 		_ = loginTemplate.Execute(w, nil)
 	})
 
-	csrfMiddleware := auth.CSRFMiddleware{}
+	csrfMiddleware := auth.CSRFMiddlewareWithMetrics{Metrics: metricsCollector}
 
 	loginMux := http.NewServeMux()
 	loginMux.Handle("/login", loginHandler)
@@ -168,6 +183,10 @@ func NewHTTPServer(ctx context.Context, cfg *config.AppConfig) (*http.Server, ne
 	loginMux.Handle("/", csrfMiddleware.Handler(authHandler))
 
 	httpHandler := logger.AccessLogMiddleware(loginMux)
+
+	if metricsCollector != nil {
+		httpHandler = metricsCollector.HTTPMiddleware(httpHandler)
+	}
 
 	server := &http.Server{
 		Addr:              listenAddr,

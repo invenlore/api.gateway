@@ -3,6 +3,7 @@
 FROM golang:1.24.12 AS builder
 
 ARG CGO_ENABLED=0
+ARG SERVICE_VERSION=unknown
 WORKDIR /app
 
 RUN go env -w GOMODCACHE=/root/.cache/go-build
@@ -11,12 +12,14 @@ COPY . .
 
 RUN --mount=type=cache,target=/root/.cache/go-build go mod download
 RUN --mount=type=cache,target=/root/.cache/go-build go build -o ./bin/gateway
+RUN printf "%s" "$SERVICE_VERSION" > /app/version.txt
 
 FROM scratch
 
 WORKDIR /app
 
 COPY --from=builder /app/bin/gateway ./gateway
+COPY --from=builder /app/version.txt ./version.txt
 
 COPY --from=ghcr.io/tarampampam/microcheck:1 /bin/httpcheck /bin/httpcheck
 HEALTHCHECK --interval=1m --timeout=5s --start-period=10s --retries=3 CMD ["/bin/httpcheck", "http://localhost/health"]
