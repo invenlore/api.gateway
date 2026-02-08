@@ -17,11 +17,13 @@ import (
 	"github.com/invenlore/api.gateway/pkg/auth"
 	"github.com/invenlore/api.gateway/pkg/logger"
 	gatewaymetrics "github.com/invenlore/api.gateway/pkg/metrics"
+	"github.com/invenlore/api.gateway/pkg/ratelimit"
 	"github.com/invenlore/api.gateway/pkg/ui"
 	"github.com/invenlore/api.gateway/pkg/utils"
 	"github.com/invenlore/core/pkg/config"
 	corelogger "github.com/invenlore/core/pkg/logger"
 	identity_v1 "github.com/invenlore/proto/pkg/identity/v1"
+	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -184,6 +186,38 @@ func NewHTTPServer(ctx context.Context, cfg *config.AppConfig, metricsCollector 
 
 	httpHandler := logger.AccessLogMiddleware(loginMux)
 
+	rateLimitCfg := cfg.RateLimit
+
+	var rateLimitRedis *redis.Client
+
+	if rateLimitCfg.Enabled {
+		trustedCIDRs, err := ratelimit.ParseCIDRs(rateLimitCfg.TrustedProxyCIDRs)
+		if err != nil {
+			loggerEntry.WithError(err).Warn("rate limit: invalid trusted proxy cidrs")
+		} else {
+			rateLimitRedis = redis.NewClient(&redis.Options{
+				Addr:     rateLimitCfg.RedisAddress,
+				Password: rateLimitCfg.RedisPassword,
+				DB:       rateLimitCfg.RedisDB,
+			})
+
+			if pingErr := rateLimitRedis.Ping(ctx).Err(); pingErr != nil {
+				loggerEntry.WithError(pingErr).Warn("rate limit: redis ping failed, limiter disabled")
+
+				_ = rateLimitRedis.Close()
+				rateLimitRedis = nil
+			} else {
+				limiter := ratelimit.NewRedisLimiter(rateLimitRedis)
+				resolver := ratelimit.IPResolver{TrustProxy: rateLimitCfg.TrustProxy, TrustedProxyCIDRs: trustedCIDRs}
+
+				rlMiddleware := ratelimit.NewMiddleware(&rateLimitCfg, resolver, limiter, metricsCollector)
+				if rlMiddleware != nil {
+					httpHandler = rlMiddleware.Handler(httpHandler)
+				}
+			}
+		}
+	}
+
 	if metricsCollector != nil {
 		httpHandler = metricsCollector.HTTPMiddleware(httpHandler)
 	}
@@ -198,6 +232,10 @@ func NewHTTPServer(ctx context.Context, cfg *config.AppConfig, metricsCollector 
 	}
 
 	cleanup := func() {
+		if rateLimitRedis != nil {
+			_ = rateLimitRedis.Close()
+		}
+
 		connMu.RLock()
 
 		list := make([]*ServiceConnectionInfo, 0, len(conns))

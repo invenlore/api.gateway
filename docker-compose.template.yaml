@@ -10,6 +10,7 @@ services:
     ports:
       - 80:80
       - 8080:8080
+      - 9090:9090
     environment:
       - APP_ENV=dev
       - APP_LOG_LEVEL=DEBUG
@@ -20,6 +21,32 @@ services:
       - METRICS_PORT=9090
       - SERVICE_HEALTH_TIMEOUT=30s
       - IDENTITY_SERVICE_ENDPOINT=invenlore-identity-service:8081
+      - RATE_LIMIT_ENABLED=true
+      - RATE_LIMIT_REDIS_ADDRESS=redis:6379
+      - RATE_LIMIT_PERIOD=1s
+      - RATE_LIMIT_TRUST_PROXY=false
+      - RATE_LIMIT_EXEMPT_PATHS=/health,/metrics
+      - RATE_LIMIT_AUTH_RPS=10
+      - RATE_LIMIT_AUTH_BURST=20
+      - RATE_LIMIT_ADMIN_RPS=30
+      - RATE_LIMIT_ADMIN_BURST=60
+      - RATE_LIMIT_SWAGGER_RPS=50
+      - RATE_LIMIT_SWAGGER_BURST=100
+      - RATE_LIMIT_OTHER_RPS=200
+      - RATE_LIMIT_OTHER_BURST=400
+    deploy:
+      restart_policy:
+        condition: on-failure
+
+  redis:
+    image: redis:7.4.2-alpine
+    container_name: invenlore-redis
+    hostname: invenlore-redis
+    networks:
+      - invenlore-network
+    ports:
+      - 6379:6379
+    command: ["redis-server", "--appendonly", "no"]
     deploy:
       restart_policy:
         condition: on-failure

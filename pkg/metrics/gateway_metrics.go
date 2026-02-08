@@ -19,6 +19,7 @@ type GatewayMetrics struct {
 	grpcRequests   *prometheus.CounterVec
 	grpcDuration   *prometheus.HistogramVec
 	authDenied     *prometheus.CounterVec
+	rateLimitDrops *prometheus.CounterVec
 	jwksRefresh    *prometheus.CounterVec
 	jwksAgeSeconds prometheus.Gauge
 }
@@ -70,6 +71,14 @@ func NewGatewayMetrics(reg *coremetrics.Registry) *GatewayMetrics {
 		[]string{"reason"},
 	)
 
+	rateLimitDrops := prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "invenlore_gateway_rate_limit_dropped_total",
+			Help: "Total number of requests dropped by rate limit.",
+		},
+		[]string{"reason", "route_group"},
+	)
+
 	jwksRefresh := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "invenlore_gateway_jwks_refresh_total",
@@ -85,7 +94,7 @@ func NewGatewayMetrics(reg *coremetrics.Registry) *GatewayMetrics {
 		},
 	)
 
-	reg.Registerer.MustRegister(httpRequests, httpDuration, grpcRequests, grpcDuration, authDenied, jwksRefresh, jwksAge)
+	reg.Registerer.MustRegister(httpRequests, httpDuration, grpcRequests, grpcDuration, authDenied, rateLimitDrops, jwksRefresh, jwksAge)
 
 	return &GatewayMetrics{
 		httpRequests:   httpRequests,
@@ -93,6 +102,7 @@ func NewGatewayMetrics(reg *coremetrics.Registry) *GatewayMetrics {
 		grpcRequests:   grpcRequests,
 		grpcDuration:   grpcDuration,
 		authDenied:     authDenied,
+		rateLimitDrops: rateLimitDrops,
 		jwksRefresh:    jwksRefresh,
 		jwksAgeSeconds: jwksAge,
 	}
@@ -162,6 +172,18 @@ func (m *GatewayMetrics) IncAuthDenied(reason string) {
 	}
 
 	m.authDenied.WithLabelValues(reason).Inc()
+}
+
+func (m *GatewayMetrics) IncRateLimitDrop(reason, routeGroup string) {
+	if m == nil || reason == "" {
+		return
+	}
+
+	if routeGroup == "" {
+		routeGroup = "other"
+	}
+
+	m.rateLimitDrops.WithLabelValues(reason, routeGroup).Inc()
 }
 
 func (m *GatewayMetrics) ObserveJWKSRefresh(success bool) {
