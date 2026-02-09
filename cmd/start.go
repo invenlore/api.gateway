@@ -13,12 +13,15 @@ import (
 	"github.com/invenlore/api.gateway/internal/transport"
 	gatewaymetrics "github.com/invenlore/api.gateway/pkg/metrics"
 	"github.com/invenlore/core/pkg/config"
+	corelogger "github.com/invenlore/core/pkg/logger"
 	coremetrics "github.com/invenlore/core/pkg/metrics"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
 
 func Start() {
+	corelogger.InitEarlyFromEnv()
+
 	loggerEntry := logrus.WithField("scope", "gateway")
 	loggerEntry.Info("gateway starting...")
 

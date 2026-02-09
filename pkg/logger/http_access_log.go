@@ -82,12 +82,12 @@ func AccessLogMiddleware(next http.Handler) http.Handler {
 
 		entry := loggerEntryBase.WithFields(logrus.Fields{
 			"request_id":            reqID,
-			"method":                r.Method,
-			"path":                  r.URL.Path,
+			"http_method":           r.Method,
+			"http_path":             r.URL.Path,
 			"query":                 r.URL.RawQuery,
 			"status":                lrw.status,
 			"bytes":                 lrw.bytes,
-			"duration_ms":           dur.Milliseconds(),
+			"latency_ms":            dur.Milliseconds(),
 			"remote_ip":             realIP(r),
 			"user_agent":            r.UserAgent(),
 			"request_content_type":  r.Header.Get("Content-Type"),
