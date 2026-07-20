@@ -100,11 +100,17 @@ func NewHTTPServer(ctx context.Context, cfg *config.AppConfig, metricsCollector 
 			unary = append(unary, metricsCollector.GRPCClientInterceptor(serviceName))
 		}
 
-		return []grpc.DialOption{
+		dialOpts := []grpc.DialOption{
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithChainUnaryInterceptor(unary...),
 			grpc.WithChainStreamInterceptor(baseStreamInterceptors...),
 		}
+
+		if cfg.AppEnv != config.AppEnvProduction {
+			dialOpts = append(dialOpts, grpc.WithDisableServiceConfig())
+		}
+
+		return dialOpts
 	}
 
 	var (
