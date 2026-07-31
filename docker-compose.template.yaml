@@ -2,7 +2,16 @@ services:
   api-gateway:
     build:
       context: .
-    image: invenlore/invenlore-api-gateway
+      dockerfile: Dockerfile.local
+      additional_contexts:
+        core: ../core
+        proto: ../proto
+      args:
+        SERVICE_VERSION: local-workspace
+      platforms:
+        - linux/amd64
+    image: invenlore-api-gateway:local
+    pull_policy: build
     container_name: invenlore-api-gateway
     hostname: invenlore-api-gateway
     networks:
@@ -15,7 +24,7 @@ services:
       - APP_ENV=dev
       - APP_LOG_LEVEL=DEBUG
       - SERVICE_NAME=gateway
-      - SERVICE_VERSION=dev
+      - SERVICE_VERSION=local-workspace
       - HTTP_PORT=8080
       - HEALTH_PORT=8081
       - METRICS_PORT=9090
